@@ -442,6 +442,42 @@ def test_content_hash_changes_with_content_and_provenance():
     assert content_hash(verified) != content_hash(message)
 
 
+def test_fallback_does_not_borrow_time_from_previous_sentence():
+    message = NormalizedMessage(
+        id="hack",
+        subject="Hackathon judges needed",
+        body="Volunteer at the ACM hackathon on Saturday, December 5, 2026 from 10 a.m. to noon "
+             "in Cherry Hall. Sign up by December 1.",
+        received_at="2026-11-13T09:00:00-05:00",
+    )
+    cls = classify_email(message).classification
+    assert cls.category == Category.event
+    assert cls.event_start == datetime.fromisoformat("2026-12-05T10:00:00-05:00")
+    assert cls.event_end == datetime.fromisoformat("2026-12-05T12:00:00-05:00")
+    assert cls.deadline_at is None
+    assert cls.deadline_date == date(2026, 12, 1)
+
+
+@pytest.mark.parametrize(
+    "body, start, end",
+    [
+        ("Talk on January 14, 2027, 11–1 p.m. Eastern.", "2027-01-14T11:00:00-05:00", "2027-01-14T13:00:00-05:00"),
+        ("Workshop March 3, 2027 at 9:30 a.m. ET.", "2027-03-03T09:30:00-05:00", None),
+        ("Seminar on 12/08/2026 2:00-3:15 PM Central.", "2026-12-08T14:00:00-06:00", "2026-12-08T15:15:00-06:00"),
+    ],
+)
+def test_fallback_time_formats(body, start, end):
+    message = NormalizedMessage(id="t", subject="Seminar", body=body, received_at="2026-11-13T09:00:00-05:00")
+    cls = classify_email(message).classification
+    assert cls.event_start == datetime.fromisoformat(start)
+    assert cls.event_end == (end and datetime.fromisoformat(end))
+
+
+def test_fallback_summary_skips_greeting():
+    cls = classify_email(to_message(FIXTURES_BY_ID["intern-001"])).classification
+    assert not cls.summary.startswith("Hello")
+
+
 def test_classify_is_deterministic_for_fallback():
     message = to_message(FIXTURES_BY_ID["research-003"])
     assert classify_email(message) == classify_email(message)

@@ -412,6 +412,7 @@ _CATEGORY_PATTERNS = {
         r"\bguest speaker\b", r"\bspeaker\b", r"\blectures?\b", r"\bseminars?\b",
         r"\bworkshops?\b", r"\btalks?\b", r"\bpanel\b", r"\bmeet(?:ing|ings|s)?\b",
         r"\binfo(?:rmation)? session\b", r"\bwebinar\b", r"\bsymposium\b",
+        r"\bhackathons?\b", r"\bconference\b", r"\bcompetition\b", r"\bexpo\b",
     ],
     Category.general: [
         r"\bnewsletter\b", r"\bweekly\b", r"\bdigest\b", r"\bannouncements?\b",
@@ -493,6 +494,11 @@ _DEADLINE_NEAR = re.compile(
 _BY_BEFORE = re.compile(
     r"\b(?:by|before)\s+(?:(?:mon|tues|wednes|thurs|fri|satur|sun)day,?\s+)?$", re.I
 )
+# Sentence end: punctuation + space + capital, but not after a.m./p.m./Dr. etc.
+_SENTENCE_END = re.compile(
+    r"(?<=[.!?])(?<![ap]\.m\.)(?<![AP]\.M\.)(?<!\bDr\.)(?<!\bMr\.)(?<!\bMs\.)(?<!\bSt\.)\s+(?=[A-Z])"
+)
+_GREETING = re.compile(r"^\s*(?:hi|hello|hey|dear|greetings|good (?:morning|afternoon|evening))\b[^\n]*\n", re.I)
 _LOCATION = re.compile(
     r"\b(?:at|in)\s+(?:the\s+)?(?P<loc>(?:[A-Z][\w.'&-]*\s+){0,4}"
     r"(?:Hall|Center|Building|Auditorium|Library|Union|Lab|Laboratory|Arena|Gym|Theatre|Theater|Complex)"
@@ -579,8 +585,11 @@ def _extract_dates(text: str, received: datetime) -> Dict[str, Any]:
         day = _resolve_date(match, received)
         if day is None:
             continue
-        before = text[max(0, match.start() - 40): match.start()].rsplit("\n", 1)[-1]
+        # Look for a time only within the same sentence as the date.
+        before = text[max(0, match.start() - 60): match.start()].rsplit("\n", 1)[-1]
+        before = _SENTENCE_END.split(before)[-1]
         after = text[match.end(): match.end() + 80].split("\n", 1)[0]
+        after = _SENTENCE_END.split(after)[0]
         is_deadline = bool(_DEADLINE_NEAR.search(before) or _BY_BEFORE.search(before))
         start, end = _find_time(after)
         zone_window = after
@@ -639,11 +648,8 @@ def _rule_tags(category: Category, text: str) -> List[str]:
 
 
 def _rule_summary(body: str) -> str:
-    flat = " ".join(body.split())
-    sentences = re.split(
-        r"(?<=[.!?])(?<![ap]\.m\.)(?<![AP]\.M\.)(?<!\bDr\.)(?<!\bMr\.)(?<!\bMs\.)(?<!\bSt\.)\s+(?=[A-Z])",
-        flat,
-    )
+    flat = " ".join(_GREETING.sub("", body, count=1).split())
+    sentences = _SENTENCE_END.split(flat)
     summary = " ".join(sentences[:2])
     if len(summary) > 300:
         summary = summary[:297].rsplit(" ", 1)[0] + "..."
