@@ -83,6 +83,18 @@ def test_retries_retry_after_within_budget(monkeypatch: pytest.MonkeyPatch) -> N
     assert sleeps == [1.0]
 
 
+def test_preserves_retry_after_when_delay_exceeds_retry_budget(monkeypatch: pytest.MonkeyPatch) -> None:
+    sleeps: list[float] = []
+    monkeypatch.setattr(graph.time, "sleep", sleeps.append)
+    use_transport(monkeypatch, lambda request: httpx.Response(429, headers={"Retry-After": "30"}))
+    with pytest.raises(graph.GraphServiceError) as exc:
+        graph.list_recent_messages("validated-assertion", limit=1)
+    assert exc.value.code == "graph_throttled"
+    assert exc.value.status_code == 429
+    assert exc.value.retry_after == 30
+    assert sleeps == []
+
+
 def test_sanitizes_consent_failure(monkeypatch: pytest.MonkeyPatch) -> None:
     def handler(request: httpx.Request) -> httpx.Response:
         return httpx.Response(403, json={"error": {"message": "contains private vendor details"}})
@@ -135,7 +147,7 @@ def test_preserves_transaction_id_and_converts_dst_boundary_to_utc(monkeypatch: 
         if request_count == 1:
             # The retry uses exactly the same Graph transaction ID and payload.
             raise httpx.ReadTimeout("simulated timeout", request=request)
-        return httpx.Response(201, json={"id": "event-1", "webLink": "https://outlook.office.com/calendar/item"})
+        return httpx.Response(201, json={"id": "event-1", "webLink": "https://outlook.office365.com/owa/?itemid=event-1"})
 
     use_transport(monkeypatch, handler)
     monkeypatch.setattr(graph.time, "sleep", lambda _: None)
@@ -155,6 +167,22 @@ def test_preserves_transaction_id_and_converts_dst_boundary_to_utc(monkeypatch: 
     assert posted[0]["start"]["dateTime"] == "2026-11-01T05:30:00"
     assert posted[0]["end"]["dateTime"] == "2026-11-01T06:30:00"
     assert posted[0]["start"]["timeZone"] == posted[0]["end"]["timeZone"] == "UTC"
+    assert result["web_link"] == "https://outlook.office365.com/owa/?itemid=event-1"
+
+
+def test_rejects_event_response_with_untrusted_web_link(monkeypatch: pytest.MonkeyPatch) -> None:
+    use_transport(monkeypatch, lambda request: httpx.Response(201, json={"id": "event-1", "webLink": "https://attacker.example/event"}))
+    event = {
+        "confirmed": True,
+        "all_day": False,
+        "start": "2026-11-19T15:00:00-05:00",
+        "end": "2026-11-19T16:00:00-05:00",
+        "time_zone": "America/New_York",
+    }
+    with pytest.raises(graph.GraphServiceError) as exc:
+        graph.create_event("validated-assertion", event, "stable-transaction-id")
+    assert exc.value.code == "graph_invalid_response"
+    assert "attacker.example" not in str(exc.value)
 
 
 def test_all_day_end_is_exclusive_and_unconfirmed_writes_are_rejected() -> None:

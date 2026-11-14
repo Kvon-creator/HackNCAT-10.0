@@ -11,6 +11,7 @@ import os
 import re
 import time
 from datetime import date, datetime, timezone
+from email.utils import parsedate_to_datetime
 from typing import Any, Mapping
 from urllib.parse import urlparse
 from zoneinfo import ZoneInfo, ZoneInfoNotFoundError
@@ -23,17 +24,27 @@ GRAPH_HOST = "graph.microsoft.com"
 DEFAULT_TIMEOUT = httpx.Timeout(10.0, connect=3.0)
 MAX_MESSAGES = 25
 MAX_RETRIES = 2
+MAX_RETRY_WAIT_SECONDS = 2.0
+OUTLOOK_HOSTS = {"outlook.office.com", "outlook.office365.com", "outlook.live.com"}
 
 
 class GraphServiceError(Exception):
     """Safe, stable error suitable for mapping to the API error contract."""
 
-    def __init__(self, code: str, message: str, status_code: int = 503, claims: str | None = None):
+    def __init__(
+        self,
+        code: str,
+        message: str,
+        status_code: int = 503,
+        claims: str | None = None,
+        retry_after: int | None = None,
+    ):
         super().__init__(message)
         self.code = code
         self.message = message
         self.status_code = status_code
         self.claims = claims
+        self.retry_after = retry_after
 
 
 def _credentials() -> tuple[str, str, str]:
@@ -48,7 +59,13 @@ def _safe_graph_link(value: Any) -> str | None:
     if not isinstance(value, str):
         return None
     parsed = urlparse(value)
-    if parsed.scheme == "https" and parsed.hostname in {GRAPH_HOST, "outlook.office.com"}:
+    if (
+        parsed.scheme == "https"
+        and parsed.hostname in OUTLOOK_HOSTS
+        and parsed.username is None
+        and parsed.password is None
+        and parsed.port in (None, 443)
+    ):
         return value
     return None
 
@@ -78,6 +95,22 @@ def _raise_safe_response(response: httpx.Response) -> None:
     if status >= 500:
         raise GraphServiceError("graph_unavailable", "Microsoft Graph is temporarily unavailable", 503)
     raise GraphServiceError("graph_request_failed", "Microsoft Graph could not complete the request", 502)
+
+
+def _retry_after_seconds(value: str | None) -> int:
+    if not value:
+        return 1
+    try:
+        seconds = float(value)
+    except ValueError:
+        try:
+            retry_at = parsedate_to_datetime(value)
+            if retry_at.tzinfo is None:
+                retry_at = retry_at.replace(tzinfo=timezone.utc)
+            seconds = (retry_at - datetime.now(timezone.utc)).total_seconds()
+        except (TypeError, ValueError, OverflowError):
+            return 1
+    return max(0, int(seconds + 0.999))
 
 
 def _get_obo_token(assertion: str, scopes: list[str]) -> str:
@@ -132,15 +165,15 @@ def _request(
             if response.is_error:
                 _raise_safe_response(response)
             return response
-        if attempt == MAX_RETRIES:
-            _raise_safe_response(response)
-        try:
-            delay = float(response.headers.get("Retry-After", "1"))
-        except ValueError:
-            delay = 1.0
+        delay = _retry_after_seconds(response.headers.get("Retry-After"))
         # Stay within a small request budget; do not sleep for vendor supplied extremes.
-        if delay < 0 or delay > 2:
-            _raise_safe_response(response)
+        if attempt == MAX_RETRIES or delay > MAX_RETRY_WAIT_SECONDS:
+            raise GraphServiceError(
+                "graph_throttled",
+                "Microsoft Graph is temporarily throttling requests",
+                429,
+                retry_after=delay,
+            )
         time.sleep(delay)
     raise GraphServiceError("graph_unavailable", "Microsoft Graph is temporarily unavailable", 503)
 
@@ -276,6 +309,6 @@ def create_event(assertion: str, event: Mapping[str, Any], transaction_id: str) 
         raise GraphServiceError("graph_invalid_response", "Microsoft returned an invalid response", 502) from exc
     event_id = result.get("id") if isinstance(result, dict) else None
     link = _safe_graph_link(result.get("webLink")) if isinstance(result, dict) else None
-    if not event_id:
+    if not event_id or not link:
         raise GraphServiceError("graph_invalid_response", "Microsoft returned an invalid event", 502)
     return {"graph_event_id": event_id, "web_link": link, "status": "added"}
