@@ -18,6 +18,7 @@ Run from the repo root with the backend venv's Python:
 
 import argparse
 import json
+import os
 import sys
 from datetime import date, datetime, timezone
 from pathlib import Path
@@ -46,14 +47,48 @@ def to_message(f) -> NormalizedMessage:
     )
 
 
+ENV_FILE = REPO / "backend" / ".env"
+
+
+def load_env_file(path=ENV_FILE):
+    """Load KEY=VALUE lines from backend/.env into os.environ.
+
+    Variables already set in the shell win. Values are never printed.
+    """
+    if not path.exists():
+        return []
+    loaded = []
+    for line in path.read_text(encoding="utf-8-sig").splitlines():
+        line = line.strip()
+        if not line or line.startswith("#") or "=" not in line:
+            continue
+        key, value = line.split("=", 1)
+        key = key.strip()
+        if key.startswith("export "):
+            key = key[len("export "):].strip()
+        value = value.strip()
+        if len(value) >= 2 and value[0] == value[-1] and value[0] in "\"'":
+            value = value[1:-1]
+        if key and value and key not in os.environ:
+            os.environ[key] = value
+            loaded.append(key)
+    return loaded
+
+
 def make_provider(mode):
     if mode == "fallback":
         return None
     if mode == "canned":
         return CannedProvider({f["id"]: f["model_output"] for f in FIXTURES})
+    load_env_file()
     provider = provider_from_env()
     if provider is None:
-        sys.exit("live mode needs OPENAI_API_KEY and OPENAI_MODEL in the environment.")
+        missing = [k for k in ("OPENAI_API_KEY", "OPENAI_MODEL") if not os.environ.get(k)]
+        sys.exit(
+            "live mode needs %s. Put them in backend/.env (copy backend/.env.example) "
+            "or set them in your shell." % " and ".join(missing)
+        )
+    print("Live provider: model=%s (key loaded, not shown)" % provider.model)
     return provider
 
 
