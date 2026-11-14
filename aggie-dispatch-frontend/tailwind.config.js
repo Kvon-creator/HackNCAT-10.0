@@ -2,7 +2,7 @@
    Build a local stylesheet so the page renders without internet:
    npx tailwindcss@3.4.17 -c tailwind.config.js -i tailwind.input.css -o tailwind.css --minify */
 module.exports = {
-  content: ['./index.html', './api-bridge.js'],
+  content: ['./index.html', './api-bridge.js', './calendar-links.js'],
   theme: {
     extend: {
       colors: {

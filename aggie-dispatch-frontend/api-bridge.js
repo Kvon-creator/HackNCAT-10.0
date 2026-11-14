@@ -212,7 +212,8 @@
   // ------------------------------------------------------------------ browser wiring
 
   var API = apiBase(window.location.search, window.AGGIE_API_BASE);
-  var state = { token: null, items: [], container: null, persona: null };
+  // lane: null = show everything (default); otherwise one of LANE_ORDER
+  var state = { token: null, items: [], container: null, persona: null, lane: null };
 
   function toast(message) {
     if (typeof window.showToast === 'function') window.showToast(message);
@@ -438,18 +439,16 @@
     var nav = document.getElementById('nav-digest-count');
     if (nav) nav.textContent = String(items.length);
 
+    // The collapsible strip now only explains the ranking; the lane chips become filter buttons below it.
     var chips = document.querySelector('#view-home details summary span.flex');
     if (chips) {
-      chips.classList.add('flex-1', 'min-w-0'); // chips wrap; "Filter breakdown" keeps its row
+      chips.classList.add('flex-1', 'min-w-0');
       chips.textContent = '';
-      chips.appendChild(el('strong', 'text-aggie-navy uppercase tracking-wider', 'Ranked lanes:'));
-      LANE_ORDER.forEach(function (key) {
-        // Empty lanes stay listed (so the order is clear) but are dimmed.
-        var span = el('span', 'px-2 py-0.5 rounded-xs font-bold ' + LANE_STYLE[key].chip + (counts[key] ? '' : ' opacity-40'),
-          counts[key] + ' ' + LANE_STYLE[key].label);
-        chips.appendChild(span);
-      });
+      chips.appendChild(el('strong', 'text-aggie-navy uppercase tracking-wider', 'How this digest is ranked'));
     }
+    var toggle = document.querySelector('#view-home details summary > span:last-child');
+    if (toggle && toggle.lastChild) toggle.lastChild.textContent = ' Details';
+    renderLaneFilter(counts, items.length);
 
     var breakdown = document.querySelector('#view-home details > div');
     if (breakdown) {
@@ -466,11 +465,65 @@
     setSubtitle('Synthetic demo inbox: each announcement is classified by AggieConnect and ranked against your preferences. Switch students in the sidebar to see the ranking change.');
   }
 
+  function filterButton(lane, text, cls, empty) {
+    var active = state.lane === lane;
+    var b = el('button', 'px-2.5 py-1 rounded-xs font-mono text-xs font-bold transition ' + cls +
+      (empty ? ' opacity-40 cursor-not-allowed' : ' cursor-pointer hover:opacity-90') + (active ? ' aggie-filter-active' : '') + TAP, text);
+    b.type = 'button';
+    b.dataset.lane = lane || 'all';
+    b.setAttribute('aria-pressed', active ? 'true' : 'false');
+    if (empty) { b.disabled = true; b.title = 'No messages in this lane'; }
+    b.addEventListener('click', function () {
+      // Clicking the active lane (or "All") returns to the default, unfiltered digest.
+      state.lane = lane === null || state.lane === lane ? null : lane;
+      render();
+      var again = document.querySelector('#aggie-lane-filter [data-lane="' + (lane || 'all') + '"]');
+      if (again) again.focus();
+    });
+    return b;
+  }
+
+  function renderLaneFilter(counts, total) {
+    var bar = document.getElementById('aggie-lane-filter');
+    if (!bar) {
+      var strip = document.querySelector('#view-home .pb-6 > details');
+      if (!strip) return;
+      bar = el('div', 'mt-3 flex flex-wrap items-center gap-2');
+      bar.id = 'aggie-lane-filter';
+      bar.setAttribute('role', 'group');
+      bar.setAttribute('aria-label', 'Filter the digest by lane');
+      strip.insertAdjacentElement('afterend', bar);
+    }
+    bar.textContent = '';
+    bar.appendChild(el('span', 'font-mono text-xs font-bold uppercase tracking-wider text-aggie-navy mr-1', 'Show:'));
+    bar.appendChild(filterButton(null, 'All ' + total, 'text-aggie-navy bg-white border border-slate-300'));
+    LANE_ORDER.forEach(function (key) {
+      bar.appendChild(filterButton(key, counts[key] + ' ' + LANE_STYLE[key].label, LANE_STYLE[key].chip, !counts[key]));
+    });
+  }
+
+  function visibleItems() {
+    return state.lane ? state.items.filter(function (i) { return i.priority === state.lane; }) : state.items;
+  }
+
   function render() {
     var c = state.container;
     c.textContent = '';
-    state.items.forEach(function (item) { c.appendChild(card(item)); });
+    var shown = visibleItems();
+    shown.forEach(function (item) { c.appendChild(card(item)); });
+    if (!shown.length && state.items.length) {
+      var empty = el('div', 'py-10 font-mono text-sm text-slate-600');
+      empty.appendChild(document.createTextNode('No messages in this lane right now. '));
+      var reset = el('button', 'font-semibold text-aggie-blue underline underline-offset-4 cursor-pointer' + TAP, 'Show all messages');
+      reset.type = 'button';
+      reset.addEventListener('click', function () { state.lane = null; render(); });
+      empty.appendChild(reset);
+      c.appendChild(empty);
+    }
     updateHeader(state.items);
+    if (state.lane) {
+      setStatus('Showing ' + shown.length + ' of ' + state.items.length + ' • ' + LANE_STYLE[state.lane].label + ' only');
+    }
   }
 
   // ---------------------------------------------------------------- actions

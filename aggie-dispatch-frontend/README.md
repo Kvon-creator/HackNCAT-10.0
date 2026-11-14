@@ -24,6 +24,8 @@ What is connected:
 - **Feed:** a demo session is created automatically, and the Home digest shows all ranked opportunities with lane, match score, reason and dates.
 - **Persona switcher:** in the sidebar, it saves that student's preferences and re-ranks the feed.
 - **Save:** the button saves or unsaves the opportunity in the API.
+- **Lane filters:** the "Show:" row under the digest header (All · Verified Emergency · Urgent · Action Needed · Opportunity) shows only that lane's messages, in ranked order. Click the active lane again, or click **All**, to return to the full digest. Empty lanes are disabled.
+- **+ Google Calendar on announcements and the calendar:** `calendar-links.js` adds the link to every School Announcement (beside "Sync Date to Calendar") and to every event in the calendar's "Selected date focus" and "Upcoming November Agenda". This includes events added later. It works without the API, reads event details from the existing buttons and `calendarEvents`, and doesn't modify the page's functions.
 - **+ Google Calendar:** opens Google Calendar in a new tab with the event filled in (title, time in campus time, location, summary and match reason). The student reviews it and clicks Save. No Google setup or API keys are needed, and it works with any Google account.
 - **Simulate Outlook add:** asks for a confirming second click, then records a simulated event through `POST /api/calendar/events` and adds it to the page's November calendar. Live Outlook needs NC A&T app registration.
 - **Loading and offline states:** "Ranking your announcements…" shows until the feed arrives. If the API can't be reached, the sample digest appears labeled "Sample digest • AggieConnect is offline".
