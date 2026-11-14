@@ -1,0 +1,2 @@
+-- Synthetic-only seed template. Insert fixture users/opportunities with generated UUIDs
+-- in a disposable demo database; never seed real student or email data.
