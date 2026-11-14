@@ -20,6 +20,7 @@ import argparse
 import json
 import os
 import sys
+import time
 from datetime import date, datetime, timezone
 from pathlib import Path
 
@@ -192,7 +193,9 @@ def cmd_eval(args):
     field_misses = {}
     sources = {}
     print("%-24s %-6s %-9s %-12s %-10s %s" % ("fixture", "result", "answered", "category", "lane", "mismatches"))
-    for f in FIXTURES:
+    for i, f in enumerate(FIXTURES):
+        if args.delay and i:
+            time.sleep(args.delay)  # stay under low per-minute API rate limits
         result = classify_email(to_message(f), provider=provider)
         misses = compare(result, f["expected"], lenient_review=args.mode == "fallback")
         # In canned/live mode a fallback answer means the model path did not run.
@@ -267,6 +270,8 @@ def main(argv=None):
     p.add_argument("--profile", help="also rank against a profile from sample_preferences.json")
     add_mode(p)
     p = sub.add_parser("eval", help="scorecard of every fixture against its labels")
+    p.add_argument("--delay", type=float, default=0.0,
+                   help="seconds to wait between fixtures (use ~5 in live mode on a new API account)")
     add_mode(p)
     p = sub.add_parser("feed", help="show the ranked feed for a profile")
     p.add_argument("--profile", default="cs_internship")

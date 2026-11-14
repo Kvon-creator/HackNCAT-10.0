@@ -711,7 +711,23 @@ def parse_model_output(data: Dict[str, Any]) -> Classification:
 
 
 def ground_classification(cls: Classification, text: str) -> Classification:
-    """Remove times the message never states. Dates are kept; times are not invented."""
+    """Remove dates and times the message never states explicitly.
+
+    - No explicit calendar date (e.g. only "within 1 hour", "Thursday", "tomorrow"):
+      all date fields are cleared and flagged. Relative dates are left to the student.
+    - Explicit date but no time of day: times are removed, a deadline keeps its date.
+    """
+    has_date_fields = any(
+        v is not None for v in (cls.event_start, cls.event_end, cls.deadline_at, cls.deadline_date)
+    )
+    if has_date_fields and not _DATE.search(text):
+        return cls.model_copy(
+            update=dict(event_start=None, event_end=None, deadline_at=None, deadline_date=None, needs_review=True)
+        )
+    if not has_date_fields and _DATE.search(text) and not cls.needs_review:
+        # A stated date that no field captured (e.g. an event date with no time)
+        # needs a student edit; do not rely on the model to flag it.
+        cls = cls.model_copy(update={"needs_review": True})
     if _TIME_STATED.search(text):
         return cls
     update: Dict[str, Any] = {}
@@ -746,6 +762,7 @@ def apply_trust_policy(
     - Unverified emergency -> deadline if a validated deadline exists, else general; needs review.
     - Urgent needs explicit urgency language plus a stated date within 72 hours, or a verified source.
     - Deadline needs a validated deadline.
+    - Credential or identity requests cap an unverified message at general.
     """
     verified = bool(message.verified_emergency_source)
     needs_review = cls.needs_review or is_suspicious(text)
@@ -767,6 +784,12 @@ def apply_trust_policy(
             priority = Priority.deadline if has_deadline else Priority.general
 
     if priority == Priority.deadline and not has_deadline:
+        priority = Priority.general
+
+    # A message asking for credentials or identity checks is never elevated
+    # above general without trusted provenance, whatever dates it contains.
+    if not verified and _CREDENTIAL_ASK.search(text):
+        needs_review = True
         priority = Priority.general
 
     if category != cls.category or needs_review != cls.needs_review:

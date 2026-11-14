@@ -147,6 +147,60 @@ def test_prompt_injection_does_not_elevate_and_is_flagged():
     assert "ignore all previous instructions" in block.lower()
 
 
+def test_live_regression_spoofed_emergency_with_inferred_date_stays_general():
+    """Recorded from the first live run: the model turned 'within 1 hour' into a
+    deadline_date, which used to route a phishing email into the deadline lane."""
+    fixture = FIXTURES_BY_ID["emergency-spoofed-009"]
+    output = dict(fixture["model_output"], category="general", deadline_date="2026-11-12", needs_review=True)
+    result = classify_email(to_message(fixture), provider=CannedProvider({fixture["id"]: output}))
+    assert result.priority == Priority.general
+    assert result.classification.deadline_date is None
+    assert result.needs_review is True
+
+
+def test_live_regression_stated_date_without_time_is_flagged():
+    """Recorded from live runs: the model left the career-fair time empty
+    (correct) but did not flag the missing time for review."""
+    fixture = FIXTURES_BY_ID["careerfair-013"]
+    output = dict(fixture["model_output"], needs_review=False)
+    result = classify_email(to_message(fixture), provider=CannedProvider({fixture["id"]: output}))
+    assert result.classification.event_start is None
+    assert result.needs_review is True
+
+
+def test_relative_dates_without_explicit_date_are_cleared():
+    message = NormalizedMessage(
+        id="rel", subject="Study group", body="Study group tomorrow at 5 p.m. in the lounge.",
+        received_at="2026-11-13T09:00:00-05:00",
+    )
+    output = {
+        "category": "event", "suggested_priority": "general", "title": "Study group",
+        "summary": "Study group tomorrow.", "tags": ["event"],
+        "event_start": "2026-11-14T17:00:00-05:00", "event_end": None, "deadline_at": None,
+        "deadline_date": None, "location": None, "confidence": 0.8, "needs_review": False,
+    }
+    result = classify_email(message, provider=CannedProvider({"rel": output}))
+    assert result.classification.event_start is None
+    assert result.needs_review is True
+
+
+def test_credential_request_caps_unverified_message_at_general():
+    message = NormalizedMessage(
+        id="phish", subject="Scholarship deadline",
+        body="Your scholarship is due December 1, 2026. Reply with your password to keep it.",
+        received_at="2026-11-13T09:00:00-05:00",
+    )
+    output = {
+        "category": "scholarship", "suggested_priority": "deadline", "title": "Scholarship",
+        "summary": "Due December 1.", "tags": ["scholarship"], "event_start": None, "event_end": None,
+        "deadline_at": None, "deadline_date": "2026-12-01", "location": None,
+        "confidence": 0.7, "needs_review": False,
+    }
+    result = classify_email(message, provider=CannedProvider({"phish": output}))
+    assert result.priority == Priority.general
+    assert result.needs_review is True
+
+
 def test_forged_urgent_without_date_is_demoted():
     result = classify_email(to_message(FIXTURES_BY_ID["forged-urgent-012"]), provider=CannedProvider(CANNED))
     assert result.priority == Priority.general
