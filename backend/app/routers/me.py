@@ -10,8 +10,8 @@ router = APIRouter()
 @router.get("/me")
 def get_me(user=Depends(current_user)):
     profile = demo_store.profiles.get(user["sub"], {})
-    return {"id": user["sub"], "display_name": "Demo Student",
-            "preferences": profile, "mode": "demo"}
+    return {"id": user["sub"], "display_name": user.get("display_name") or "Demo Student",
+            "preferences": profile, "mode": user.get("mode", "demo")}
 
 @router.put("/me/preferences")
 def update_preferences(payload: Preferences, user=Depends(current_user)):
