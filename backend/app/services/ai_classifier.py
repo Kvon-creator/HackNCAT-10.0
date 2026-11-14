@@ -97,7 +97,9 @@ urgency language with a stated date within 3 days; deadline when a deadline is s
 otherwise general.
 - title: short plain-text title. summary: 1-2 plain-text sentences of stated facts.
 - tags: up to 10 short lowercase tags: opportunity type, majors, fields, academic levels, \
-organizations (e.g. "internship", "computer science", "software engineering", "junior").
+organizations (e.g. "internship", "computer science", "software engineering", "junior"). \
+Name these majors exactly as "computer science", "biology" or "theatre" when the message \
+targets them; do not tag a major just because an event is held in a building or venue.
 - Timestamps: ISO 8601 with UTC offset. Use the time zone the message states; if none is \
 stated, use America/New_York and set needs_review to true. Resolve a missing year from the \
 received date.
@@ -427,6 +429,9 @@ _CATEGORY_ORDER = [
 
 _TAG_PATTERNS_I = [
     (r"\bcomputer science\b", "computer science"),
+    (r"\bbiology\b|\bbiological sciences?\b", "biology"),
+    # Not bare "theatre": venue names like "Robeson Theatre" are not the major.
+    (r"\btheat(?:re|er) (?:majors?|students?|arts|department|program)\b|\bdrama\b|\bperforming arts\b", "theatre"),
     (r"\bcomputer engineering\b", "computer engineering"),
     (r"\belectrical\b", "electrical engineering"),
     (r"\bmechanical\b", "mechanical engineering"),
@@ -710,6 +715,11 @@ def parse_model_output(data: Dict[str, Any]) -> Classification:
         raise ProviderParseError("schema violation: %s" % ", ".join(fields)) from None
 
 
+_DATED_OPPORTUNITIES = {
+    Category.internship, Category.scholarship, Category.research, Category.event, Category.academic,
+}
+
+
 def ground_classification(cls: Classification, text: str) -> Classification:
     """Remove dates and times the message never states explicitly.
 
@@ -724,9 +734,15 @@ def ground_classification(cls: Classification, text: str) -> Classification:
         return cls.model_copy(
             update=dict(event_start=None, event_end=None, deadline_at=None, deadline_date=None, needs_review=True)
         )
-    if not has_date_fields and _DATE.search(text) and not cls.needs_review:
+    if (
+        not has_date_fields
+        and cls.category in _DATED_OPPORTUNITIES
+        and _DATE.search(text)
+        and not cls.needs_review
+    ):
         # A stated date that no field captured (e.g. an event date with no time)
-        # needs a student edit; do not rely on the model to flag it.
+        # needs a student edit; do not rely on the model to flag it. Alerts and
+        # announcements that merely mention a date are not flagged.
         cls = cls.model_copy(update={"needs_review": True})
     if _TIME_STATED.search(text):
         return cls

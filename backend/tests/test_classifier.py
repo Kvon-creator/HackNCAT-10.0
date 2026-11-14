@@ -168,6 +168,12 @@ def test_live_regression_stated_date_without_time_is_flagged():
     assert result.needs_review is True
 
 
+def test_verified_alert_mentioning_a_date_is_not_flagged():
+    result = classify_email(to_message(FIXTURES_BY_ID["emergency-verified-008"]), provider=CannedProvider(CANNED))
+    assert result.priority == Priority.emergency
+    assert result.needs_review is False
+
+
 def test_relative_dates_without_explicit_date_are_cleared():
     message = NormalizedMessage(
         id="rel", subject="Study group", body="Study group tomorrow at 5 p.m. in the lounge.",
@@ -530,6 +536,54 @@ def test_fallback_time_formats(body, start, end):
 def test_fallback_summary_skips_greeting():
     cls = classify_email(to_message(FIXTURES_BY_ID["intern-001"])).classification
     assert not cls.summary.startswith("Hello")
+
+
+def test_accepts_dev2_graph_service_message_shape():
+    """Exact row shape returned by graph_service.list_recent_messages() (Dev 2)."""
+    row = {
+        "id": "AAMkAGI2-immutable-id",
+        "subject": "Software Engineering Internship Info Session",
+        "sender": "recruiting@carolinagrid.example.com",
+        "received_at": "2026-11-12T19:05:00Z",
+        "body_preview": "Carolina Grid Systems is hiring software engineering interns. Info session on "
+                        "November 19, 2026, 3–4 p.m. Eastern at McNair Hall, Room 123.",
+        "source_link": "https://outlook.office365.com/owa/?ItemID=abc",
+    }
+    message = NormalizedMessage(**row)
+    assert message.body.startswith("Carolina Grid Systems")
+    assert message.verified_emergency_source is False
+    cls = classify_email(message).classification
+    assert cls.category == Category.internship
+    assert cls.event_start == datetime.fromisoformat("2026-11-19T15:00:00-05:00")
+
+
+def test_graph_shape_cannot_claim_verified_and_empty_sender_is_none():
+    message = NormalizedMessage(id="x", subject="s", sender="", body_preview="hello",
+                                received_at="2026-11-12T19:05:00Z")
+    assert message.sender is None
+    assert message.verified_emergency_source is False
+    assert message.body == "hello"
+
+
+def test_explicit_body_wins_over_body_preview():
+    message = NormalizedMessage(id="x", body="full text", body_preview="preview",
+                                received_at="2026-11-12T19:05:00Z")
+    assert message.body == "full text"
+
+
+@pytest.mark.parametrize(
+    "body, present, absent",
+    [
+        ("Biology majors: apply for the summer field ecology internship.", "biology", "theatre"),
+        ("Auditions for Theatre majors and performing arts students open Monday.", "theatre", "biology"),
+        ("Career talk in the Paul Robeson Theatre for Computer Science students.", "computer science", "theatre"),
+    ],
+)
+def test_fallback_tags_frontend_majors(body, present, absent):
+    message = NormalizedMessage(id="m", subject="Opportunity", body=body, received_at="2026-11-13T09:00:00-05:00")
+    tags = classify_email(message).classification.tags
+    assert present in tags
+    assert absent not in tags
 
 
 def test_classify_is_deterministic_for_fallback():

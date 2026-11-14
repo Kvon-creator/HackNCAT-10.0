@@ -74,6 +74,23 @@ class NormalizedMessage(BaseModel):
     source_link: Optional[str] = None
     verified_emergency_source: bool = False
 
+    @model_validator(mode="before")
+    @classmethod
+    def _accept_graph_service_shape(cls, data):
+        """Accept Dev 2's graph_service.list_recent_messages() rows directly.
+
+        They carry the text as ``body_preview`` (Graph bodyPreview) and may send an
+        empty sender. Graph rows have no verified_emergency_source, so it defaults to
+        False; only trusted pipeline code should ever set it.
+        """
+        if isinstance(data, dict):
+            data = dict(data)
+            if not data.get("body") and data.get("body_preview"):
+                data["body"] = data["body_preview"]
+            if data.get("sender") == "":
+                data["sender"] = None
+        return data
+
 
 class Classification(BaseModel):
     """Exactly what the model must return. Every key is required; nullable keys

@@ -85,6 +85,24 @@ def test_normalization_and_aliases(raw, token):
     assert normalize_token(raw) == token
 
 
+@pytest.mark.parametrize(
+    "major, tag",
+    [
+        ("Computer Science", "computer science"),
+        ("Theatre", "theatre"),
+        ("Theater", "theatre"),
+        ("Theatre Arts", "theatre"),
+        ("Biology", "biology"),
+        ("Bio", "biology"),
+        ("Biological Sciences", "biology"),
+    ],
+)
+def test_frontend_majors_match(major, tag):
+    ranked = rank_tags([tag], Preferences(major=major))
+    assert ranked.matched_fields == ["major"]
+    assert ranked.relevance_score == 25
+
+
 def test_undergraduate_tag_matches_class_year():
     ranked = rank_tags(["research", "undergraduate"], Preferences(academic_level="Sophomore"))
     assert ranked.matched_fields == ["academic_level"]
