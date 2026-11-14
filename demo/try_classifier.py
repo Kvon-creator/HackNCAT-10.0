@@ -238,6 +238,120 @@ def cmd_feed(args):
                                             result.message_id, r.relevance_reason, flag))
 
 
+def _pause(args, prompt="Press Enter to continue..."):
+    print()
+    if not args.no_pause:
+        try:
+            input(prompt)
+        except EOFError:
+            pass
+    print()
+
+
+def _banner(title):
+    print("=" * 78)
+    print(title)
+    print("=" * 78)
+
+
+def _feed_rows(items, limit):
+    for i, item in enumerate(items[:limit], 1):
+        flag = "  [review]" if item["needs_review"] else ""
+        print("  %2d. %-9s %3d  %s%s" % (i, item["priority"], item["relevance_score"], item["title"][:56], flag))
+
+
+def _best(items):
+    """Highest score among items not flagged for review (ties keep feed order)."""
+    clean = [x for x in items if not x["needs_review"]] or list(items)
+    return max(clean, key=lambda x: x["relevance_score"])
+
+
+def _suggested_label(args, width):
+    label = "Model output (worst case)" if args.mode == "canned" else "Rules suggested"
+    return label.ljust(width)
+
+
+def cmd_present(args):
+    """Scripted walkthrough of the three Dev 3 demo moments (backup demo)."""
+    from app.services.demo_feed import build_demo_feed, rerank_feed
+
+    first, second = load_profile(args.profile), load_profile(args.switch_to)
+    provider = make_provider(args.mode)
+
+    _banner("AggieConnect AI: personalized, trustworthy announcement ranking  (mode=%s)" % args.mode)
+    print("Thirteen synthetic Outlook announcements are classified into categories,")
+    print("dates and priority lanes, then ranked against the student's preferences.")
+    print("Lanes: verified emergency > urgent > deadline > general. Score: interest 35,")
+    print("major 25, career goal 20, academic level 10, organization 10.")
+    _pause(args)
+
+    # 1. Personalization ---------------------------------------------------------
+    _banner("1. Personalized ranking with an explanation")
+    items = build_demo_feed("presenter", PROFILES[args.profile], provider=provider,
+                            mode="fallback" if provider is None else "canned")
+    print("Profile %r: major %s, interests %s, career goals %s\n" % (
+        args.profile, first.major, ", ".join(first.interests), ", ".join(first.career_goals) or "-"))
+    _feed_rows(items, 7)
+    top = _best(items)
+    print("\nBest match: %s  ->  %d/100" % (top["title"], top["relevance_score"]))
+    print("Why: %s" % top["relevance_reason"])
+    _pause(args, "Press Enter to change the student's preferences...")
+
+    reranked = rerank_feed(items, PROFILES[args.switch_to])
+    print("Switched to %r: major %s, interests %s (no reclassification, same stored tags)\n" % (
+        args.switch_to, second.major, ", ".join(second.interests)))
+    _feed_rows(reranked, 7)
+    same = next(x for x in reranked if x["message_id"] == top["message_id"])
+    best = _best(reranked)
+    print("\n%s: %d -> %d" % (top["title"][:48], top["relevance_score"], same["relevance_score"]))
+    print("New best match: %s  ->  %d/100" % (best["title"], best["relevance_score"]))
+    print("Why: %s" % best["relevance_reason"])
+    _pause(args)
+
+    by_id = {x["message_id"]: x for x in items}
+
+    # 2. Spoofed emergency -------------------------------------------------------
+    _banner("2. A spoofed emergency cannot jump the queue")
+    spoof_fixture = BY_ID["emergency-spoofed-009"]
+    spoof = classify_email(to_message(spoof_fixture), provider=provider)
+    print("Subject : %s" % spoof_fixture["subject"])
+    print("Sender  : %s (not a trusted campus alert source)" % spoof_fixture["sender"])
+    print("Body    : %s" % " ".join(spoof_fixture["body"].split())[:150] + "...")
+    print()
+    print("%s: %s" % (_suggested_label(args, 17), spoof.classification.suggested_priority.value))
+    print("Final lane       : %s   (decided outside the model)" % spoof.priority.value)
+    print("Verified source  : %s" % spoof.verified_source)
+    print("Needs review     : %s   (asks students to verify their identity)" % spoof.needs_review)
+    real = by_id["emergency-verified-008"]
+    print()
+    print("Compare: '%s'" % real["title"])
+    print("         from trusted provenance -> lane %s, verified %s" % (real["priority"], real["verified_source"]))
+    _pause(args)
+
+    # 3. Prompt injection --------------------------------------------------------
+    _banner("3. Hidden instructions inside an email are ignored")
+    inj_fixture = BY_ID["injection-011"]
+    inj = classify_email(to_message(inj_fixture), provider=provider)
+    injected = next((line for line in inj_fixture["body"].split("\n") if "ignore" in line.lower()), "")
+    print("Subject       : %s" % inj_fixture["subject"])
+    print("Hidden text   : \"%s\"" % injected.strip())
+    print()
+    print("%s: %s (confidence %.2f)" % (_suggested_label(args, 16), inj.classification.suggested_priority.value,
+                                                     inj.classification.confidence))
+    print("Final lane      : %s   (real deadline: %s)" % (inj.priority.value, fmt(inj.classification.deadline_date)))
+    print("Verified source : %s" % inj.verified_source)
+    print("Needs review    : %s   (injection attempt detected)" % inj.needs_review)
+    print()
+    print("The email is still useful: it stays a research opportunity with its real")
+    print("deadline, but it cannot promote itself and it is flagged for review.")
+    if args.mode == "canned":
+        print()
+        print("(Canned mode replays recorded model outputs. For the spoofed and injected")
+        print(" emails they simulate a model that was fooled, to show the safeguards hold.")
+        print(" The classifier was validated live on the same 13 emails: 13/13.)")
+    _banner("End of walkthrough")
+
+
 def cmd_try(args):
     if args.file:
         body = Path(args.file).read_text(encoding="utf-8")
@@ -276,6 +390,11 @@ def main(argv=None):
     p = sub.add_parser("feed", help="show the ranked feed for a profile")
     p.add_argument("--profile", default="cs_internship")
     add_mode(p)
+    p = sub.add_parser("present", help="scripted walkthrough of the three demo moments (backup demo)")
+    p.add_argument("--profile", default="cs_internship")
+    p.add_argument("--switch-to", default="bio_research", help="profile to switch to for the re-rank")
+    p.add_argument("--no-pause", action="store_true", help="run straight through without waiting for Enter")
+    p.add_argument("--mode", choices=["canned", "fallback"], default="canned")
     p = sub.add_parser("try", help="classify your own (synthetic) email")
     p.add_argument("--subject")
     p.add_argument("--body")
@@ -287,7 +406,8 @@ def main(argv=None):
     add_mode(p)
 
     args = parser.parse_args(argv)
-    handler = {"list": cmd_list, "show": cmd_show, "eval": cmd_eval, "feed": cmd_feed, "try": cmd_try}
+    handler = {"list": cmd_list, "show": cmd_show, "eval": cmd_eval, "feed": cmd_feed, "try": cmd_try,
+               "present": cmd_present}
     return handler[args.command](args) or 0
 
 

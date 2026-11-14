@@ -44,6 +44,22 @@ def test_eval_fallback_and_canned_pass_all_fixtures(capsys):
     assert "passed 13/13" in capsys.readouterr().out
 
 
+import pytest
+
+
+@pytest.mark.parametrize("mode", ["canned", "fallback"])
+def test_present_walkthrough_runs_and_shows_the_three_moments(capsys, mode):
+    assert cli.main(["present", "--no-pause", "--mode", mode]) == 0
+    out = capsys.readouterr().out
+    assert "Best match: Software Engineering Internship Info Session  ->  80/100" in out
+    assert "80 -> 0" in out
+    assert "New best match: Undergraduate Research Positions" in out  # not the flagged injection email
+    assert "Final lane       : general" in out  # spoofed emergency
+    assert "lane emergency, verified True" in out  # real alert
+    assert "Final lane      : deadline" in out  # injection keeps its real lane
+    assert "End of walkthrough" in out
+
+
 def test_show_feed_list_and_try_run(capsys):
     cli.main(["list"])
     cli.main(["show", "intern-001", "--profile", "cs_internship"])

@@ -86,6 +86,11 @@ The `answered` column must say `model` for every row; a `fallback` row means the
 failed (quota, rate limit, wrong model) and counts as a failure. One run costs 13 requests;
 `--delay` spaces calls for accounts with low rate limits.
 
+**Backup demo walkthrough:** `backend/.venv/Scripts/python demo/try_classifier.py present`
+steps through the three demo moments (80-point match and re-rank, spoofed emergency, prompt
+injection), pausing for Enter between them. Options: `--profile`, `--switch-to` (default
+`bio_research`), `--no-pause`, `--mode canned|fallback`.
+
 **Demo / presentation:** use `--mode canned`. It replays the recorded schema-valid outputs in
 `sample_emails.json` through the same validation, grounding and trust policy, with no API calls.
 
