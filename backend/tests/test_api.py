@@ -2,6 +2,8 @@ from fastapi.testclient import TestClient
 from app.main import app
 from app import demo_store
 import pytest
+from concurrent.futures import ThreadPoolExecutor
+from threading import Barrier
 
 client = TestClient(app)
 
@@ -73,3 +75,19 @@ def test_priority_filter_keeps_feed_order():
     assert deadlines["total"] == len(expected)
     assert [item["id"] for item in deadlines["items"]] == expected
     assert all(item["priority"] == "deadline" for item in deadlines["items"])
+
+def test_simultaneous_feed_requests_seed_once():
+    headers = session()
+    start = Barrier(2)
+
+    def request_feed():
+        start.wait()
+        return client.get("/api/opportunities?limit=50", headers=headers)
+
+    with ThreadPoolExecutor(max_workers=2) as pool:
+        responses = list(pool.map(lambda _: request_feed(), range(2)))
+
+    assert all(response.status_code == 200 for response in responses)
+    assert all(response.json()["total"] == 13 for response in responses)
+    assert all(len(response.json()["items"]) == 13 for response in responses)
+    assert len(demo_store.feed_items) == 13

@@ -7,8 +7,7 @@ from app.services.demo_feed import build_demo_feed, to_public
 
 router = APIRouter()
 
-def _user_items(user_id: str) -> list[dict]:
-    """Return a user's rows, seeding them once in demo mode."""
+def _user_items_unlocked(user_id: str) -> list[dict]:
     rows = [x for x in demo_store.feed_items if x.get("user_id") == user_id]
     if not rows and settings.demo_mode:
         demo_store.feed_items.extend(
@@ -16,6 +15,11 @@ def _user_items(user_id: str) -> list[dict]:
         )
         rows = [x for x in demo_store.feed_items if x.get("user_id") == user_id]
     return rows
+
+def _user_items(user_id: str) -> list[dict]:
+    """Return a user's rows, seeding them once in demo mode."""
+    with demo_store.seed_lock:
+        return _user_items_unlocked(user_id)
 
 @router.get("/opportunities")
 def list_opportunities(q: str | None = None, category: str | None = None,
@@ -42,16 +46,18 @@ def get_opportunity(opportunity_id: UUID, user=Depends(current_user)):
 
 @router.post("/opportunities/{opportunity_id}/save", status_code=204)
 def save_opportunity(opportunity_id: UUID, user=Depends(current_user)):
-    for item in _user_items(user["sub"]):
-        if item["id"] == str(opportunity_id) and item.get("user_id") == user["sub"]:
-            item["saved"] = True
-            return
+    with demo_store.seed_lock:
+        for item in _user_items_unlocked(user["sub"]):
+            if item["id"] == str(opportunity_id) and item.get("user_id") == user["sub"]:
+                item["saved"] = True
+                return
     raise HTTPException(404, "Opportunity not found")
 
 @router.delete("/opportunities/{opportunity_id}/save", status_code=204)
 def unsave_opportunity(opportunity_id: UUID, user=Depends(current_user)):
-    for item in _user_items(user["sub"]):
-        if item["id"] == str(opportunity_id) and item.get("user_id") == user["sub"]:
-            item["saved"] = False
-            return
+    with demo_store.seed_lock:
+        for item in _user_items_unlocked(user["sub"]):
+            if item["id"] == str(opportunity_id) and item.get("user_id") == user["sub"]:
+                item["saved"] = False
+                return
     raise HTTPException(404, "Opportunity not found")
