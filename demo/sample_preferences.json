@@ -17,6 +17,22 @@
       "career_goals": ["Graduate School"],
       "show_reminders": true
     },
+    "bio_research": {
+      "major": "Biology",
+      "academic_level": "Sophomore",
+      "interests": ["Research", "Machine Learning"],
+      "organizations": [],
+      "career_goals": ["Graduate School"],
+      "show_reminders": true
+    },
+    "theatre_events": {
+      "major": "Theatre",
+      "academic_level": "Freshman",
+      "interests": ["Event", "Scholarship"],
+      "organizations": [],
+      "career_goals": [],
+      "show_reminders": true
+    },
     "empty": {
       "major": null,
       "academic_level": null,

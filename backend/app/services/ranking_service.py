@@ -35,6 +35,16 @@ MAX_TOKEN_LEN = 40
 
 # Small, explicit alias map: normalized variant -> canonical token.
 ALIASES = {
+    # Majors offered in the frontend: Computer Science, Theatre, Biology.
+    "theater": "theatre",
+    "theatre arts": "theatre",
+    "theater arts": "theatre",
+    "drama": "theatre",
+    "performing arts": "theatre",
+    "bio": "biology",
+    "biological sciences": "biology",
+    "biological science": "biology",
+    "biology sciences": "biology",
     "cs": "computer science",
     "comp sci": "computer science",
     "compsci": "computer science",

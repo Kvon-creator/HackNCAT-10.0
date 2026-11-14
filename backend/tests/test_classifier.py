@@ -168,6 +168,12 @@ def test_live_regression_stated_date_without_time_is_flagged():
     assert result.needs_review is True
 
 
+def test_verified_alert_mentioning_a_date_is_not_flagged():
+    result = classify_email(to_message(FIXTURES_BY_ID["emergency-verified-008"]), provider=CannedProvider(CANNED))
+    assert result.priority == Priority.emergency
+    assert result.needs_review is False
+
+
 def test_relative_dates_without_explicit_date_are_cleared():
     message = NormalizedMessage(
         id="rel", subject="Study group", body="Study group tomorrow at 5 p.m. in the lounge.",
@@ -563,6 +569,21 @@ def test_explicit_body_wins_over_body_preview():
     message = NormalizedMessage(id="x", body="full text", body_preview="preview",
                                 received_at="2026-11-12T19:05:00Z")
     assert message.body == "full text"
+
+
+@pytest.mark.parametrize(
+    "body, present, absent",
+    [
+        ("Biology majors: apply for the summer field ecology internship.", "biology", "theatre"),
+        ("Auditions for Theatre majors and performing arts students open Monday.", "theatre", "biology"),
+        ("Career talk in the Paul Robeson Theatre for Computer Science students.", "computer science", "theatre"),
+    ],
+)
+def test_fallback_tags_frontend_majors(body, present, absent):
+    message = NormalizedMessage(id="m", subject="Opportunity", body=body, received_at="2026-11-13T09:00:00-05:00")
+    tags = classify_email(message).classification.tags
+    assert present in tags
+    assert absent not in tags
 
 
 def test_classify_is_deterministic_for_fallback():
