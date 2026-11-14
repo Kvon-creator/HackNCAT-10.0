@@ -74,13 +74,19 @@ Add `--verified` to simulate trusted emergency provenance.
 
 **6. Live provider (hours 12–16)**
 
-Use synthetic text only. Set the variables in your shell, never in source:
+Use synthetic text only. Copy `backend/.env.example` to `backend/.env` (git-ignored) and fill in
+`OPENAI_MODEL` and `OPENAI_API_KEY` there, never in `.env.example`. Shell variables override the file.
 
 ```
-# PowerShell
-$env:OPENAI_API_KEY = "<key>"; $env:OPENAI_MODEL = "<structured-outputs model>"
-backend/.venv/Scripts/python demo/try_classifier.py eval --mode live
+backend/.venv/Scripts/python demo/try_classifier.py eval --mode live --delay 6
 ```
+
+The `answered` column must say `model` for every row; a `fallback` row means the provider call
+failed (quota, rate limit, wrong model) and counts as a failure. One run costs 13 requests;
+`--delay` spaces calls for accounts with low rate limits.
+
+**Demo / presentation:** use `--mode canned`. It replays the recorded schema-valid outputs in
+`sample_emails.json` through the same validation, grounding and trust policy, with no API calls.
 
 ## Contract for teammates
 
@@ -107,11 +113,23 @@ feed_sort_key(priority, relevance_score, received_at, id, verified_source)
 - `deadline` needs a deadline value.
 - If the message states no time of day, model-supplied times are removed (a deadline keeps its date).
 - Prompt-injection phrasing and credential requests set `needs_review`.
+- Model-supplied dates are cleared when the message states no explicit calendar date
+  (relative wording like "within 1 hour" or "Thursday" is left for the student).
+- Unverified messages that ask for credentials or identity checks stay in the `general` lane.
+- A stated date that no field captured (e.g. an event date with no time) sets `needs_review`.
+
+## Live validation
+
+`gpt-6-luna`, 2026-11-13: 13/13 fixtures passed with every answer from the model, after fixing
+three findings from earlier live runs (spoofed lockdown routed to the deadline lane via an
+inferred date, missing-time review left to the model, an over-strict location label).
 
 ## Open items needing input
 
-- `docs/api-contract.md` (Dev 4): freeze field names, the `NormalizedMessage` input shape, and
-  whether an unverified `emergency` category should become `general` or `other`.
-- `OPENAI_MODEL` choice and a key for the live run.
-- Python version for CI/Render (this code needs 3.9 or newer).
+- `docs/api-contract.md` (Dev 4): add the classifier input (`NormalizedMessage`) and stored result
+  (`ClassifiedMessage`) shapes, and confirm an unverified `emergency` category becomes `general`.
+- Shared types: `Category`, `Priority` and `Preferences` exist in both `schemas/opportunity.py`
+  and `schemas/classification.py`; keep one (preference list limits differ: 50 vs 20).
+- Python version: the backend starter needs 3.10+; this module needs 3.9+.
+- `config.py` and Render: add `OPENAI_MODEL` and `OPENAI_API_KEY`.
 - Final alias list for majors, interests and organizations in `ranking_service.ALIASES`.
