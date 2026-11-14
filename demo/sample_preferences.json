@@ -1,0 +1,29 @@
+{
+  "_about": "SYNTHETIC student profiles for ranking demos and tests.",
+  "profiles": {
+    "cs_internship": {
+      "major": "Computer Science",
+      "academic_level": "Junior",
+      "interests": ["Internships", "Machine Learning"],
+      "organizations": ["NSBE"],
+      "career_goals": ["Software Engineer"],
+      "show_reminders": true
+    },
+    "me_research": {
+      "major": "Mechanical Engineering",
+      "academic_level": "Sophomore",
+      "interests": ["Research", "Robotics"],
+      "organizations": [],
+      "career_goals": ["Graduate School"],
+      "show_reminders": true
+    },
+    "empty": {
+      "major": null,
+      "academic_level": null,
+      "interests": [],
+      "organizations": [],
+      "career_goals": [],
+      "show_reminders": true
+    }
+  }
+}
