@@ -41,8 +41,15 @@
     emergency: { label: 'Verified Emergency', chip: 'text-white bg-red-700', time: 'text-red-800' },
     urgent: { label: 'Urgent', chip: 'text-red-800 bg-red-100', time: 'text-red-800' },
     deadline: { label: 'Action Needed', chip: 'text-amber-950 bg-aggie-gold/40', time: 'text-red-800' },
-    general: { label: 'Opportunity', chip: 'text-aggie-blue bg-blue-100', time: 'text-slate-500' }
+    general: { label: 'General', chip: 'text-aggie-blue bg-blue-100', time: 'text-slate-500' }
   };
+  // In the general lane, real opportunities are labeled as such; newsletters, scams and unrelated mail are not.
+  var OPPORTUNITY_CATEGORIES = { internship: 1, scholarship: 1, research: 1, event: 1 };
+  function laneChipLabel(item) {
+    var lane = LANE_STYLE[item.priority] || LANE_STYLE.general;
+    if (lane === LANE_STYLE.general && OPPORTUNITY_CATEGORIES[item.category]) return 'Opportunity';
+    return lane.label;
+  }
   var LANE_ORDER = ['emergency', 'urgent', 'deadline', 'general'];
 
   // Phone-size tap targets (44px) without changing the desktop look.
@@ -384,15 +391,17 @@
   }
 
   // Same structure and classes as the page's static digest cards.
-  function card(item) {
+  // opts.preview: a classified-on-the-spot result (not in the feed): no Save or Outlook actions.
+  function card(item, opts) {
+    var preview = !!(opts && opts.preview);
     var lane = LANE_STYLE[item.priority] || LANE_STYLE.general;
     var article = el('article', 'feed-article aggie-lane-' + (LANE_STYLE[item.priority] ? item.priority : 'general'));
-    article.dataset.opportunityId = item.id;
+    if (!preview) article.dataset.opportunityId = item.id;
     var content = el('div', 'digest-content min-w-0');
 
     var top = el('div', 'flex flex-wrap items-center justify-between gap-2 text-xs mb-1.5');
     var tags = el('div', 'flex flex-wrap items-center gap-2');
-    tags.appendChild(chip(lane.label, lane.chip));
+    tags.appendChild(chip(laneChipLabel(item), lane.chip));
     tags.appendChild(el('span', 'font-mono font-medium text-aggie-blue bg-blue-50 px-2 py-0.5 rounded-xs capitalize', item.category));
     if (item.needs_review) tags.appendChild(chip('Needs review', 'text-amber-900 bg-amber-100 border-l-2 border-amber-600'));
     top.appendChild(tags);
@@ -413,12 +422,12 @@
     if (item.location) content.appendChild(el('p', 'font-mono text-xs text-slate-500 mt-1', 'Location: ' + item.location));
 
     var actions = el('div', 'mt-4 flex flex-wrap items-center gap-3');
-    actions.appendChild(saveButton(item));
+    if (!preview) actions.appendChild(saveButton(item));
     var google = googleButton(item);
     if (google) actions.appendChild(google);
-    var cal = calendarButton(item);
+    var cal = preview ? null : calendarButton(item);
     if (cal) actions.appendChild(cal);
-    content.appendChild(actions);
+    if (actions.childNodes.length) content.appendChild(actions);
 
     article.appendChild(content);
     return article;
@@ -454,7 +463,7 @@
     if (breakdown) {
       breakdown.textContent = '';
       [
-        'Verified emergencies come first, then urgent, action-needed and opportunity items.',
+        'Verified emergencies come first, then urgent, action-needed and general items.',
         'Within a lane, items are ordered by match score: interest 35, major 25, career goal 20, academic level 10, organization 10.',
         counts.emergency + counts.urgent + counts.deadline + ' items need action; ' +
           items.filter(function (i) { return i.needs_review; }).length + ' are flagged for review.'
@@ -542,6 +551,110 @@
     });
   }
 
+  // "Try any announcement": classify pasted text live via POST /api/classify (nothing is stored).
+  var TRY_SAMPLES = {
+    phishing: {
+      subject: 'URGENT: Your student account will be locked',
+      body: 'Final notice! Your Aggie account will be locked today. Verify your password within 24 hours at the link below to keep access.'
+    },
+    event: {
+      subject: 'Robotics Club info session',
+      body: 'Join the Robotics Club for an info session on December 3, 2026, 5:30-6:30 p.m. Eastern in McNair Hall, Room 210. All Computer Science majors welcome.'
+    }
+  };
+
+  function field(id, labelText, input) {
+    var wrap = el('div', 'flex flex-col gap-1.5');
+    var label = el('label', 'font-mono text-xs font-semibold uppercase tracking-wider text-slate-600', labelText);
+    label.htmlFor = id;
+    input.id = id;
+    input.className = 'w-full min-h-[44px] px-3 py-2 bg-white border border-slate-300 rounded-sm text-[15px] text-aggie-ink focus:outline-none focus:border-aggie-blue';
+    wrap.appendChild(label);
+    wrap.appendChild(input);
+    return wrap;
+  }
+
+  function renderTryResult(box, data) {
+    box.textContent = '';
+    var meta = el('p', 'font-mono text-xs text-slate-600 mt-5',
+      'Classified just now by: ' + data.classified_by + ' · not saved to your feed');
+    box.appendChild(meta);
+    if (data.safety_notes && data.safety_notes.length) {
+      var notes = el('ul', 'mt-3 space-y-1.5 border-l-4 border-amber-600 bg-amber-50 px-4 py-3 text-sm text-amber-950 list-none');
+      notes.setAttribute('aria-label', 'Safety checks');
+      data.safety_notes.forEach(function (note) { notes.appendChild(el('li', null, '⚠ ' + note)); });
+      box.appendChild(notes);
+    }
+    box.appendChild(card(data, { preview: true }));
+  }
+
+  function addTryPanel() {
+    if (document.getElementById('aggie-try') || !state.container) return;
+    var panel = el('details', 'mt-6 bg-white border border-slate-300 rounded-md px-4 py-3');
+    panel.id = 'aggie-try';
+    var summary = el('summary', 'flex flex-wrap items-center justify-between gap-2 font-mono text-xs text-slate-700 select-none min-h-[44px] sm:min-h-0');
+    var label = el('span', 'flex flex-wrap items-center gap-2');
+    label.appendChild(el('strong', 'text-aggie-navy uppercase tracking-wider', '✎ Try any announcement'));
+    label.appendChild(el('span', 'text-slate-600', 'Paste an email and watch it get classified live'));
+    summary.appendChild(label);
+    var chevron = el('span', 'text-aggie-blue font-semibold inline-flex items-center gap-1');
+    chevron.appendChild(el('span', 'chevron-arrow inline-block transition-transform', '▸'));
+    chevron.appendChild(document.createTextNode(' Open'));
+    summary.appendChild(chevron);
+    panel.appendChild(summary);
+
+    var form = el('form', 'mt-4 flex flex-col gap-3');
+    var subject = document.createElement('input');
+    subject.type = 'text';
+    subject.maxLength = 300;
+    subject.placeholder = 'e.g., Research positions open in the Robotics Lab';
+    var body = document.createElement('textarea');
+    body.rows = 4;
+    body.maxLength = 5000;
+    body.placeholder = 'Paste or type the message text, including any dates, times and locations.';
+    form.appendChild(field('aggie-try-subject', 'Subject', subject));
+    form.appendChild(field('aggie-try-body', 'Message', body));
+
+    var row = el('div', 'flex flex-wrap items-center gap-3');
+    var submit = el('button', 'px-4 py-2 text-xs font-semibold uppercase tracking-wider bg-aggie-blue hover:bg-aggie-navy text-white rounded-sm cursor-pointer' + TAP, 'Classify');
+    submit.type = 'submit';
+    row.appendChild(submit);
+    row.appendChild(el('span', 'font-mono text-xs text-slate-500', 'Samples:'));
+    [['phishing', 'Phishing email'], ['event', 'Event invite']].forEach(function (pair) {
+      var b = el('button', 'px-2.5 py-1 text-xs font-mono border border-slate-300 rounded-sm bg-white text-slate-700 hover:border-aggie-blue cursor-pointer' + TAP, pair[1]);
+      b.type = 'button';
+      b.addEventListener('click', function () {
+        subject.value = TRY_SAMPLES[pair[0]].subject;
+        body.value = TRY_SAMPLES[pair[0]].body;
+        body.focus();
+      });
+      row.appendChild(b);
+    });
+    form.appendChild(row);
+
+    var result = el('div', '');
+    result.setAttribute('aria-live', 'polite');
+    form.addEventListener('submit', function (e) {
+      e.preventDefault();
+      if (!subject.value.trim() && !body.value.trim()) { body.focus(); return; }
+      submit.disabled = true;
+      submit.textContent = 'Classifying…';
+      request('POST', '/classify', { subject: subject.value, body: body.value }).then(function (data) {
+        renderTryResult(result, data);
+      }).catch(function (err) {
+        result.textContent = '';
+        result.appendChild(el('p', 'mt-4 text-sm text-red-800', err.message));
+      }).then(function () {
+        submit.disabled = false;
+        submit.textContent = 'Classify';
+      });
+    });
+
+    panel.appendChild(form);
+    panel.appendChild(result);
+    state.container.insertAdjacentElement('beforebegin', panel);
+  }
+
   function addRefreshButton() {
     var header = document.querySelector('#view-home .pb-6 > div');
     if (!header || document.getElementById('aggie-refresh')) return;
@@ -566,6 +679,7 @@
       .then(function () { return applyPersona(false); })
       .then(function () {
         addRefreshButton();
+        addTryPanel();
         settle('connected');
         document.querySelectorAll('input[name="student-persona"]').forEach(function (radio) {
           radio.addEventListener('change', function () {

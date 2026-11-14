@@ -5,7 +5,7 @@ from uuid import uuid4
 from fastapi.middleware.cors import CORSMiddleware
 from app.config import settings
 from app.errors import ApiError, api_error_handler
-from app.routers import health, demo, me, opportunities, sync, calendar
+from app.routers import health, demo, me, opportunities, sync, calendar, classify
 
 app = FastAPI(title="AggieConnect API", version="0.1.0")
 
@@ -39,6 +39,7 @@ app.include_router(me.router, prefix="/api")
 app.include_router(opportunities.router, prefix="/api")
 app.include_router(sync.router, prefix="/api")
 app.include_router(calendar.router, prefix="/api")
+app.include_router(classify.router, prefix="/api")
 
 
 @app.exception_handler(RequestValidationError)

@@ -387,6 +387,21 @@ def is_suspicious(text: str) -> bool:
     return bool(_INJECTION.search(text) or _CREDENTIAL_ASK.search(text))
 
 
+def safety_signals(result: "ClassifiedMessage", text: str) -> List[str]:
+    """Plain-language reasons the trust policy acted on a message (for display)."""
+    notes = []
+    if _CREDENTIAL_ASK.search(text):
+        notes.append("Asks for a password or identity check, so it is kept out of the urgent lanes.")
+    if _INJECTION.search(text):
+        notes.append("Contains instructions aimed at the AI; they were treated as text and ignored.")
+    suggested = result.classification.suggested_priority
+    if suggested == Priority.emergency and result.priority != Priority.emergency:
+        notes.append("Claims an emergency, but the sender isn't a verified campus source.")
+    elif suggested == Priority.urgent and result.priority != Priority.urgent:
+        notes.append("Says it's urgent, but has no stated date in the next 72 hours.")
+    return notes
+
+
 # --------------------------------------------------------------------------------------
 # Rule-based fallback
 # --------------------------------------------------------------------------------------
@@ -803,10 +818,12 @@ def apply_trust_policy(
         priority = Priority.general
 
     # A message asking for credentials or identity checks is never elevated
-    # above general without trusted provenance, whatever dates it contains.
+    # above general without trusted provenance, whatever dates it contains,
+    # and is never presented as an opportunity (category "other").
     if not verified and _CREDENTIAL_ASK.search(text):
         needs_review = True
         priority = Priority.general
+        category = Category.other
 
     if category != cls.category or needs_review != cls.needs_review:
         cls = cls.model_copy(update={"category": category, "needs_review": needs_review})
