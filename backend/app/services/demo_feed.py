@@ -65,7 +65,11 @@ INTERNAL_FIELDS: Tuple[str, ...] = (
 )
 
 FIXTURES_ENV = "AGGIECONNECT_DEMO_FIXTURES"
-_DEFAULT_FIXTURES = Path(__file__).resolve().parents[3] / "demo" / "sample_emails.json"
+# Bundled copy inside backend/ so a deploy rooted at backend/ (e.g. Render) still has it.
+# Canonical source is demo/sample_emails.json; a test fails if the two differ.
+_BUNDLED_FIXTURES = Path(__file__).resolve().parents[1] / "data" / "sample_emails.json"
+_REPO_FIXTURES = Path(__file__).resolve().parents[3] / "demo" / "sample_emails.json"
+_DEFAULT_FIXTURES = _BUNDLED_FIXTURES
 # Stable namespace so a user's opportunity IDs are the same on every rebuild.
 _ID_NAMESPACE = uuid.UUID("6f1c2a7e-3b9d-4c55-9a0e-2d7f8b1e4c31")
 
@@ -73,9 +77,12 @@ _PREF_LIST_LIMIT = 20  # classification.Preferences bound; Dev 4's schema allows
 
 
 def fixtures_path() -> Path:
-    """demo/sample_emails.json, or the path in AGGIECONNECT_DEMO_FIXTURES."""
+    """AGGIECONNECT_DEMO_FIXTURES if set, else the copy bundled in backend/app/data,
+    else the repo-level demo/sample_emails.json."""
     override = os.environ.get(FIXTURES_ENV)
-    return Path(override) if override else _DEFAULT_FIXTURES
+    if override:
+        return Path(override)
+    return _BUNDLED_FIXTURES if _BUNDLED_FIXTURES.exists() else _REPO_FIXTURES
 
 
 def load_demo_fixtures(path: Optional[Path] = None) -> Tuple[List[NormalizedMessage], Dict[str, Any]]:

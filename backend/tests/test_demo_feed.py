@@ -143,6 +143,20 @@ def test_fixture_path_override(tmp_path, monkeypatch):
     assert len(build_demo_feed("u")) == 2
 
 
+def test_bundled_fixtures_match_canonical_copy():
+    """backend/app/data/sample_emails.json must stay identical to demo/sample_emails.json.
+    If this fails: copy demo/sample_emails.json over backend/app/data/sample_emails.json."""
+    bundled = json.loads(demo_feed._BUNDLED_FIXTURES.read_text(encoding="utf-8"))
+    canonical = json.loads(demo_feed._REPO_FIXTURES.read_text(encoding="utf-8"))
+    assert bundled == canonical
+
+
+def test_default_fixtures_live_inside_backend():
+    """A deploy rooted at backend/ (Render) must not need the repo-level demo/ folder."""
+    assert demo_feed.fixtures_path() == demo_feed._BUNDLED_FIXTURES
+    assert BACKEND in demo_feed.fixtures_path().parents
+
+
 def test_rejects_bad_arguments():
     with pytest.raises(ValueError):
         build_demo_feed("")
