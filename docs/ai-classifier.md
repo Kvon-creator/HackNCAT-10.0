@@ -106,8 +106,10 @@ items = rerank_feed(items, new_preferences)     # after PUT /me/preferences; kee
 public = [to_public(x) for x in items]          # exactly the Opportunity contract fields
 ```
 
-Fixtures load from `demo/sample_emails.json`; set `AGGIECONNECT_DEMO_FIXTURES` to another path
-if the deployment does not include the repo-level `demo/` folder.
+Fixtures load from a copy bundled at `backend/app/data/sample_emails.json`, so a deploy rooted at
+`backend/` (Render) needs no extra setup. `demo/sample_emails.json` is the canonical file: after
+editing it, copy it over the bundled one (a test fails if they differ). `AGGIECONNECT_DEMO_FIXTURES`
+overrides the path.
 
 - `provider=None` → labeled rule fallback (`source="fallback"`). Use `provider_from_env()` for
   live, `CannedProvider` for demo mode.
