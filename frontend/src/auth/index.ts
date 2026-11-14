@@ -68,30 +68,30 @@ export async function signIn(): Promise<AccountInfo> {
   }
 }
 
-async function acquireApiToken(interactive: boolean): Promise<AuthenticationResult> {
+async function acquireApiToken(interactive: boolean, claims?: string): Promise<AuthenticationResult> {
   const client = await getClient();
   const scopes = [required(apiScope, "VITE_MS_API_SCOPE")];
   const account = getAccount(client);
-  const request: SilentRequest = { scopes, ...(account ? { account } : {}) };
+  const request: SilentRequest = { scopes, ...(account ? { account } : {}), ...(claims ? { claims } : {}) };
   try {
     const result = await client.acquireTokenSilent(request);
     client.setActiveAccount(result.account);
     return result;
   } catch (error) {
     if (!interactive || !(error instanceof InteractionRequiredAuthError)) throw error;
-    const result = await client.acquireTokenPopup({ scopes, ...(account ? { account } : {}) });
+    const result = await client.acquireTokenPopup({ scopes, ...(account ? { account } : {}), ...(claims ? { claims } : {}) });
     client.setActiveAccount(result.account);
     return result;
   }
 }
 
 /** Returns an AggieConnect API access token, never a Microsoft Graph token. */
-export async function getApiToken(): Promise<string> {
+export async function getApiToken(claims?: string): Promise<string> {
   try {
-    return (await acquireApiToken(false)).accessToken;
+    return (await acquireApiToken(false, claims)).accessToken;
   } catch (error) {
     if (!(error instanceof InteractionRequiredAuthError)) throw error;
-    return (await acquireApiToken(true)).accessToken;
+    return (await acquireApiToken(true, claims)).accessToken;
   }
 }
 

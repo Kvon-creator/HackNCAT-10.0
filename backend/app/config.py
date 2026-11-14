@@ -10,6 +10,7 @@ class Settings(BaseSettings):
     database_url: str = "sqlite:///./aggieconnect_dev.db"
     entra_tenant_id: str = ""
     entra_api_client_id: str = ""
+    entra_api_client_secret: str = ""
     entra_spa_client_id: str = ""
 
 settings = Settings()

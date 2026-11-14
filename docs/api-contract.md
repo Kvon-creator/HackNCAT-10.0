@@ -1,7 +1,9 @@
 # AggieConnect API contract (starter)
 
-All routes are prefixed with `/api`. Live mode will require an AggieConnect API access token.
-Synthetic mode uses `POST /demo/session`; the demo session must be disabled in live deployment.
+All routes are prefixed with `/api`. Live mode requires a tenant-specific Entra API access
+token with the delegated `access_as_user` scope. The API validates the token before passing
+its assertion to the Graph OBO adapter. Synthetic mode uses `POST /demo/session`; demo mode
+never calls Graph and uses fixtures plus a simulated calendar.
 
 | Method | Route | Contract |
 |---|---|---|
@@ -13,10 +15,19 @@ Synthetic mode uses `POST /demo/session`; the demo session must be disabled in l
 | GET | `/opportunities/{id}` | Opportunity; return 404 for absent/foreign IDs |
 | POST | `/opportunities/{id}/save` | Idempotent save; 204 |
 | DELETE | `/opportunities/{id}/save` | Idempotent unsave; 204 |
+| POST | `/sync` | Bounded recent inbox refresh; 200 with `fetched`, `imported`, `unchanged`, `skipped`, `failed` counts |
+| POST | `/calendar/events` | Confirmed calendar write or simulation; 201 created, 200 replay |
 
-Errors must use `{ "error": { "code": "...", "message": "...", "request_id": "..." } }`.
-The starter currently uses FastAPI's default HTTP error shape; standard error middleware is
-a remaining implementation task before contract sign-off.
+Calendar request: `{ "opportunity_id": "UUID", "confirmed": true, "all_day": false,
+"start": "ISO-8601 with offset", "end": "ISO-8601 with offset", "time_zone": "IANA zone" }`.
+All-day start/end are `YYYY-MM-DD`; the end date is exclusive. A live write reuses the same
+server-generated Graph `transactionId` after a pending/uncertain result. Response:
+`{ "id": "Graph event ID", "status": "added", "web_link": "validated Outlook URL", "simulated": false }`.
+The adapter exposes retry delays through `Retry-After` and account claims challenges through
+`WWW-Authenticate`; clients may pass the claims value to MSAL when reacquiring the API token.
+
+Errors use `{ "error": { "code": "...", "message": "...", "request_id": "..." } }`.
+Raw Graph errors, access tokens, and assertions must never be returned or logged.
 
 Opportunity category values: internship, scholarship, research, event, academic, emergency,
 general, other. Priority values: emergency, urgent, deadline, general.
