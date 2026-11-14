@@ -25,7 +25,15 @@ What is connected:
 - **Persona switcher:** in the sidebar, it saves that student's preferences and re-ranks the feed.
 - **Save:** the button saves or unsaves the opportunity in the API.
 - **+ Google Calendar:** opens Google Calendar in a new tab with the event filled in (title, time in campus time, location, summary and match reason). The student reviews it and clicks Save. No Google setup or API keys are needed, and it works with any Google account.
-- **+ Outlook (demo):** asks for a confirming second click, then records a simulated event through `POST /api/calendar/events` and adds it to the page's November calendar. Live Outlook needs NC A&T app registration.
+- **Simulate Outlook add:** asks for a confirming second click, then records a simulated event through `POST /api/calendar/events` and adds it to the page's November calendar. Live Outlook needs NC A&T app registration.
+- **Loading and offline states:** "Ranking your announcements…" shows until the feed arrives. If the API can't be reached, the sample digest appears labeled "Sample digest • AggieConnect is offline".
+
+## Offline-ready styling
+
+- **Fonts:** bundled in `fonts/` and declared in `fonts.css` (latin subset, SIL Open Font License), so Google Fonts isn't needed at runtime.
+- **Tailwind:** the page still loads Tailwind from its CDN. To remove that last internet dependency, build a local stylesheet with the same theme:
+  `npx tailwindcss@3.4.17 -c tailwind.config.js -i tailwind.input.css -o tailwind.css --minify`
+  Then replace the `cdn.tailwindcss.com` script and the inline `tailwind.config` script in `index.html` with `<link href="tailwind.css" rel="stylesheet" />`, placed after the page's `<style>` block so the cascade stays the same.
 - **Refresh inbox:** the button calls `POST /api/sync`.
 
 Options:

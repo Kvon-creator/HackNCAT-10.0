@@ -4,12 +4,17 @@
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
   <title>NC A&amp;T Aggie Dispatch — Student Announcements &amp; AI Digest</title>
+  <script>
+    /* Show a loading state instead of flashing the sample digest; api-bridge.js clears it.
+       Safety net: never stay hidden if the bridge doesn't load. */
+    document.documentElement.classList.add('aggie-pending');
+    setTimeout(function () { document.documentElement.classList.remove('aggie-pending'); }, 8000);
+  </script>
   <!-- Tailwind CSS -->
   <script src="https://cdn.tailwindcss.com"></script>
   <!-- Editorial Fonts: Newsreader (Serif), Inter (Sans), JetBrains Mono (Monospace) -->
-  <link rel="preconnect" href="https://fonts.googleapis.com" />
-  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
-  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500;600&family=Newsreader:ital,opsz,wght@0,6..72,500;0,6..72,600;0,6..72,700;1,6..72,400&display=swap" rel="stylesheet" />
+  <!-- Bundled locally (fonts/ + fonts.css) so the page doesn't need Google Fonts at runtime -->
+  <link href="fonts.css" rel="stylesheet" />
   <script>
     tailwind.config = {
       theme: {
@@ -257,6 +262,141 @@
       background-color: #FEF7E6;
       box-shadow: inset 0 0 0 2px #004684;
     }
+
+    /* --------------------------------------------------------------------------
+       5. POLISH: loading state, live-feed lanes, keyboard focus, phone layout,
+          tap targets, reduced motion (uses the existing palette only)
+       -------------------------------------------------------------------------- */
+    /* Loading: hide the sample digest until AggieConnect answers (api-bridge.js) */
+    .aggie-pending #view-home > .mt-1 > * { display: none; }
+    .aggie-pending #view-home > .mt-1::before {
+      content: "Ranking your announcements\2026";
+      display: block;
+      padding: 2.5rem 0;
+      font-family: 'JetBrains Mono', monospace;
+      font-size: 0.8rem;
+      font-weight: 600;
+      letter-spacing: 0.08em;
+      text-transform: uppercase;
+      color: #004684;
+    }
+    .aggie-pending #digest-status { visibility: hidden; }
+
+    /* Live feed lanes: same accent bar as the persona highlight */
+    .feed-article.aggie-lane-emergency {
+      border-left: 3px solid #B91C1C;
+      padding-left: 1rem;
+      margin-left: -1rem;
+      background-color: rgba(185, 28, 28, 0.05);
+    }
+    .feed-article.aggie-lane-urgent,
+    .feed-article.aggie-lane-deadline {
+      border-left: 3px solid #FDB927;
+      padding-left: 1rem;
+      margin-left: -1rem;
+      background-color: rgba(253, 185, 39, 0.06);
+    }
+    .aggie-saved {
+      background-color: #FEF7E6;
+      border-color: #FDB927 !important;
+      color: #002D56 !important;
+      font-weight: 700;
+    }
+
+    /* Keyboard focus: the tabs, persona and filter controls are visually hidden
+       radios, so show the ring on the label people actually see */
+    #tab-home:focus-visible ~ .app-shell label[for="tab-home"],
+    #tab-announcements:focus-visible ~ .app-shell label[for="tab-announcements"],
+    #tab-calendar:focus-visible ~ .app-shell label[for="tab-calendar"],
+    #persona-cs:focus-visible ~ .app-shell .masthead-header details > summary,
+    #persona-biz:focus-visible ~ .app-shell .masthead-header details > summary,
+    #persona-bio:focus-visible ~ .app-shell .masthead-header details > summary,
+    #persona-cs:focus-visible ~ .app-shell label[for="persona-cs"],
+    #persona-biz:focus-visible ~ .app-shell label[for="persona-biz"],
+    #persona-bio:focus-visible ~ .app-shell label[for="persona-bio"] {
+      outline: 3px solid #FDB927;
+      outline-offset: 2px;
+    }
+    #col-all:focus-visible ~ .college-filter-bar label[for="col-all"],
+    #col-coe:focus-visible ~ .college-filter-bar label[for="col-coe"],
+    #col-cobe:focus-visible ~ .college-filter-bar label[for="col-cobe"],
+    #col-cost:focus-visible ~ .college-filter-bar label[for="col-cost"],
+    #col-campus:focus-visible ~ .college-filter-bar label[for="col-campus"],
+    .bookmark-check:focus-visible + .bookmark-btn,
+    .main-canvas a:focus-visible,
+    .main-canvas button:focus-visible,
+    .main-canvas summary:focus-visible {
+      outline: 3px solid #004684;
+      outline-offset: 2px;
+    }
+    .masthead-header summary:focus-visible { outline: 3px solid #FDB927; outline-offset: 2px; }
+
+    /* Phones and tablets: three equal tabs with short names, nothing cut off */
+    @media (max-width: 959px) {
+      .primary-nav {
+        display: grid;
+        grid-template-columns: repeat(3, minmax(0, 1fr));
+        overflow: visible;
+      }
+      .primary-nav label {
+        flex-direction: column;
+        justify-content: center;
+        gap: 0.3rem;
+        min-height: 44px;
+        padding: 0.55rem 0.35rem;
+        text-align: center;
+        white-space: normal;
+        border-left: 0;
+        border-bottom: 3px solid transparent;
+        font-size: 0.8rem;
+      }
+      .primary-nav label > span:first-child { display: none; }
+      .primary-nav label::before { content: attr(data-short); }
+      #tab-home:checked ~ .app-shell label[for="tab-home"],
+      #tab-announcements:checked ~ .app-shell label[for="tab-announcements"],
+      #tab-calendar:checked ~ .app-shell label[for="tab-calendar"] {
+        border-bottom-color: #FDB927;
+      }
+    }
+
+    /* Phones: 44px tap targets, calendar events as colored dots (details in the agenda below) */
+    @media (max-width: 639px) {
+      .feed-article button,
+      .feed-article summary,
+      .bookmark-btn,
+      .college-filter-bar label {
+        min-height: 44px;
+        display: inline-flex;
+        align-items: center;
+      }
+      #view-calendar button { min-height: 44px; }
+      #view-calendar .day-events {
+        display: flex;
+        flex-wrap: wrap;
+        gap: 3px;
+      }
+      #view-calendar .day-events > div {
+        margin-top: 0;
+        width: 8px;
+        height: 8px;
+        padding: 0;
+        font-size: 0;
+        line-height: 0;
+        overflow: hidden;
+        border-width: 4px;
+        border-style: solid;
+        border-radius: 9999px;
+      }
+    }
+
+    @media (prefers-reduced-motion: reduce) {
+      *, *::before, *::after {
+        animation-duration: 0.01ms !important;
+        animation-iteration-count: 1 !important;
+        transition-duration: 0.01ms !important;
+        scroll-behavior: auto !important;
+      }
+    }
   </style>
 </head>
 <body class="font-sans text-aggie-ink selection:bg-aggie-blue selection:text-white">
@@ -301,15 +441,15 @@
 
         <!-- Primary Navigation (Pure CSS Radio Labels with Live Count Pills) -->
         <nav aria-label="Main sections" class="primary-nav text-sm font-medium overflow-x-auto">
-          <label for="tab-home" class="cursor-pointer whitespace-nowrap transition">
+          <label for="tab-home" data-short="Digest" class="cursor-pointer whitespace-nowrap transition">
             <span>Home • AI Inbox Digest</span>
             <span id="nav-digest-count" class="nav-pill font-mono text-[11px] font-bold px-2 py-0.5 rounded-full bg-white/15 text-white">5</span>
           </label>
-          <label for="tab-announcements" class="cursor-pointer whitespace-nowrap transition">
+          <label for="tab-announcements" data-short="Announcements" class="cursor-pointer whitespace-nowrap transition">
             <span>School Announcements</span>
             <span class="nav-pill font-mono text-[11px] font-bold px-2 py-0.5 rounded-full bg-white/15 text-white">7</span>
           </label>
-          <label for="tab-calendar" class="cursor-pointer whitespace-nowrap transition">
+          <label for="tab-calendar" data-short="Calendar" class="cursor-pointer whitespace-nowrap transition">
             <span>Academic Calendar</span>
             <span class="nav-pill font-mono text-[11px] font-bold px-2 py-0.5 rounded-full bg-white/15 text-white">Nov '26</span>
           </label>
@@ -319,7 +459,11 @@
         <div class="mt-4 lg:mt-auto pt-4 lg:pt-6 border-t border-white/15">
           <details class="group">
             <summary class="flex items-center justify-between gap-2 p-2.5 rounded-md bg-white/10 border border-aggie-gold/30 text-xs hover:bg-white/15 transition select-none">
-              <div class="min-w-0">
+              <div class="min-w-0 flex-1">
+                <p class="flex items-center justify-between gap-2 font-mono text-[10px] uppercase tracking-wider text-aggie-gold mb-1">
+                  <span>Viewing as</span>
+                  <span class="inline-flex items-center gap-1 normal-case tracking-normal text-[11px] font-semibold">Switch student <span class="chevron-arrow inline-block transition-transform">▸</span></span>
+                </p>
                 <div class="flex items-center gap-1.5">
                   <span class="w-2 h-2 rounded-full bg-aggie-gold shrink-0"></span>
                   <strong class="text-white font-semibold truncate">
@@ -334,11 +478,10 @@
                   <span class="persona-name-bio hidden">Biology / Pre-Med • CoST (2028)</span>
                 </p>
               </div>
-              <span class="chevron-arrow font-mono text-[11px] text-aggie-gold transition-transform shrink-0">▸</span>
             </summary>
 
             <div class="mt-2.5 p-3 rounded-md bg-[#001F3D] border border-white/15 space-y-2 text-xs">
-              <p class="font-mono text-[10px] uppercase tracking-wider text-aggie-gold">Preview Degree Audit Highlight</p>
+              <p class="font-mono text-[10px] uppercase tracking-wider text-aggie-gold">Demo students: switching re-ranks the digest</p>
 
               <label for="persona-cs" onclick="syncCollegeFilter('col-coe')" class="persona-label-cs block p-2 rounded-sm border border-white/15 cursor-pointer hover:bg-white/5 transition">
                 <strong class="block text-white">Jordan Vance ’27</strong>
@@ -380,10 +523,9 @@
               <p class="font-mono text-xs uppercase tracking-widest text-aggie-blue font-semibold">
                 AI Inbox Briefing • Saturday, Nov 14, 2026
               </p>
-              <span class="inline-flex items-center gap-1.5 font-mono text-[11px] text-emerald-900 bg-emerald-50 border border-emerald-200 px-2.5 py-0.5 rounded-full self-start">
+              <span id="digest-status" role="status" class="inline-flex items-center gap-1.5 font-mono text-[11px] text-emerald-900 bg-emerald-50 border border-emerald-200 px-2.5 py-0.5 rounded-full self-start">
                 <span class="w-1.5 h-1.5 rounded-full bg-emerald-600"></span>
-                Last scanned: Today at 9:42 AM • 48 emails analyzed via Aggie Access
-              </span>
+                Sample digest • preview content</span>
             </div>
 
             <h2 id="digest-heading" class="font-serif text-3xl font-bold text-aggie-navy mt-2">
@@ -392,7 +534,7 @@
               <span class="persona-name-biz hidden">Maya Lin-Washington</span>
               <span class="persona-name-bio hidden">Devon Brooks</span>
             </h2>
-            <p class="text-[15px] text-slate-600 mt-1.5 leading-relaxed">
+            <p id="digest-subtitle" class="text-[15px] text-slate-600 mt-1.5 leading-relaxed">
               Automatically extracted from your <code class="font-mono text-xs bg-slate-200/70 px-1.5 py-0.5 rounded-xs">@aggies.ncat.edu</code> inbox and cross-referenced with your Fall 2026 registration holds, financial aid checklist, and career fair RSVPs.
             </p>
 
