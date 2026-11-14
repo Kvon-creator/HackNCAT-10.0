@@ -17,6 +17,14 @@
       "career_goals": ["Graduate School"],
       "show_reminders": true
     },
+    "cs_research": {
+      "major": "Computer Science",
+      "academic_level": "Junior",
+      "interests": ["Research", "Machine Learning"],
+      "organizations": [],
+      "career_goals": ["Graduate School"],
+      "show_reminders": true
+    },
     "bio_research": {
       "major": "Biology",
       "academic_level": "Sophomore",

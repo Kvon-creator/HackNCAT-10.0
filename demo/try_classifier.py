@@ -392,7 +392,7 @@ def main(argv=None):
     add_mode(p)
     p = sub.add_parser("present", help="scripted walkthrough of the three demo moments (backup demo)")
     p.add_argument("--profile", default="cs_internship")
-    p.add_argument("--switch-to", default="bio_research", help="profile to switch to for the re-rank")
+    p.add_argument("--switch-to", default="cs_research", help="profile to switch to for the re-rank")
     p.add_argument("--no-pause", action="store_true", help="run straight through without waiting for Enter")
     p.add_argument("--mode", choices=["canned", "fallback"], default="canned")
     p = sub.add_parser("try", help="classify your own (synthetic) email")

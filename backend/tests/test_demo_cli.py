@@ -54,7 +54,7 @@ def test_present_walkthrough_runs_and_shows_the_three_moments(capsys, mode):
     # Titles differ by mode (canned model titles vs. subject lines in fallback).
     best = next(line for line in out.splitlines() if line.startswith("Best match:"))
     assert "Software Engineering Internship Info Session" in best and best.endswith("->  80/100")
-    assert "80 -> 0" in out
+    assert "80 -> 25" in out  # same CS student, interests switched from internships to research
     new_best = next(line for line in out.splitlines() if line.startswith("New best match:"))
     assert "undergraduate research positions" in new_best.lower()  # not the flagged injection email
     assert "Final lane       : general" in out  # spoofed emergency
