@@ -564,12 +564,17 @@ def _resolve_date(match: "re.Match[str]", received: datetime) -> Optional[date]:
 
 
 def _extract_dates(text: str, received: datetime) -> Dict[str, Any]:
-    """First event date and first deadline date stated in the text."""
+    """Event and deadline dates stated in the text.
+
+    For each kind, the first mention that includes a time wins; otherwise the first
+    date-only mention (e.g. "Nov 19" in a subject line, then a full timed date in the body).
+    """
     out: Dict[str, Any] = {
         "event_start": None, "event_end": None, "deadline_at": None, "deadline_date": None,
         "needs_review": False,
     }
-    have_event = have_deadline = False
+    events: List[Tuple[date, Optional[time], Optional[time], Optional[ZoneInfo], bool]] = []
+    deadlines: List[Tuple[date, Optional[time], Optional[time], Optional[ZoneInfo], bool]] = []
     for match in _DATE.finditer(text):
         day = _resolve_date(match, received)
         if day is None:
@@ -583,24 +588,33 @@ def _extract_dates(text: str, received: datetime) -> Dict[str, Any]:
             start, end = _find_time(before)
             zone_window = before + " " + after
         zone = _find_zone(zone_window)
-        if start is not None and zone is None:
+        assumed = start is not None and zone is None
+        if assumed:
             zone = CAMPUS_TZ  # stated time, unstated zone: assume campus and flag
-            out["needs_review"] = True
+        (deadlines if is_deadline else events).append((day, start, end, zone, assumed))
 
-        if is_deadline and not have_deadline:
-            have_deadline = True
-            if start is not None:
-                out["deadline_at"] = datetime.combine(day, start, tzinfo=zone)
-            else:
-                out["deadline_date"] = day
-        elif not is_deadline and not have_event:
-            have_event = True
-            if start is not None:
-                out["event_start"] = datetime.combine(day, start, tzinfo=zone)
-                if end is not None:
-                    out["event_end"] = datetime.combine(day, end, tzinfo=zone)
-            else:
-                out["needs_review"] = True  # an event with no stated time needs a student edit
+    def pick(cands):
+        timed = [c for c in cands if c[1] is not None]
+        return timed[0] if timed else (cands[0] if cands else None)
+
+    deadline = pick(deadlines)
+    if deadline:
+        day, start, _, zone, assumed = deadline
+        out["needs_review"] |= assumed
+        if start is not None:
+            out["deadline_at"] = datetime.combine(day, start, tzinfo=zone)
+        else:
+            out["deadline_date"] = day
+    event = pick(events)
+    if event:
+        day, start, end, zone, assumed = event
+        out["needs_review"] |= assumed
+        if start is not None:
+            out["event_start"] = datetime.combine(day, start, tzinfo=zone)
+            if end is not None:
+                out["event_end"] = datetime.combine(day, end, tzinfo=zone)
+        else:
+            out["needs_review"] = True  # an event with no stated time needs a student edit
     return out
 
 
@@ -626,7 +640,10 @@ def _rule_tags(category: Category, text: str) -> List[str]:
 
 def _rule_summary(body: str) -> str:
     flat = " ".join(body.split())
-    sentences = re.split(r"(?<=[.!?])\s+(?=[A-Z])", flat)
+    sentences = re.split(
+        r"(?<=[.!?])(?<![ap]\.m\.)(?<![AP]\.M\.)(?<!\bDr\.)(?<!\bMr\.)(?<!\bMs\.)(?<!\bSt\.)\s+(?=[A-Z])",
+        flat,
+    )
     summary = " ".join(sentences[:2])
     if len(summary) > 300:
         summary = summary[:297].rsplit(" ", 1)[0] + "..."
