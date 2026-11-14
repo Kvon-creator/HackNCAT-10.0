@@ -10,6 +10,7 @@ opportunity data and ranks it against student preferences.
 | `backend/app/schemas/classification.py` | Category/Priority enums, `Classification` (model output), `ClassifiedMessage` (result), `Preferences`, `RankResult`, `NormalizedMessage` (input) |
 | `backend/app/services/ai_classifier.py` | `classify_email()`: sanitize → OpenAI Structured Outputs (or stub) → validate → rule fallback on failure → time grounding → trust policy |
 | `backend/app/services/ranking_service.py` | `rank()`, `rank_tags()`, `feed_sort_key()`: deterministic 35/25/20/10/10 scoring and lane ordering |
+| `backend/app/services/demo_feed.py` | `build_demo_feed()`, `rerank_feed()`, `to_public()`: demo-mode feed of `Opportunity`-shaped records from the fixtures, no API calls |
 | `demo/sample_emails.json` | 13 labeled synthetic emails, each with a recorded model output |
 | `demo/sample_preferences.json` | Synthetic student profiles |
 | `demo/try_classifier.py` | Hands-on tester (below) |
@@ -95,6 +96,18 @@ classify_email(normalized_message, provider=None, previous=None) -> ClassifiedMe
 rank(classification, preferences) -> RankResult          # or rank_tags(stored_tags, preferences)
 feed_sort_key(priority, relevance_score, received_at, id, verified_source)
 ```
+
+Demo mode (seed a user's feed without OpenAI):
+
+```python
+from app.services.demo_feed import build_demo_feed, rerank_feed, to_public
+items = build_demo_feed(user_id, preferences)   # sorted, each has user_id, id (UUID, stable per user)
+items = rerank_feed(items, new_preferences)     # after PUT /me/preferences; keeps saved/calendar state
+public = [to_public(x) for x in items]          # exactly the Opportunity contract fields
+```
+
+Fixtures load from `demo/sample_emails.json`; set `AGGIECONNECT_DEMO_FIXTURES` to another path
+if the deployment does not include the repo-level `demo/` folder.
 
 - `provider=None` → labeled rule fallback (`source="fallback"`). Use `provider_from_env()` for
   live, `CannedProvider` for demo mode.
