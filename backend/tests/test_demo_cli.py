@@ -51,9 +51,12 @@ import pytest
 def test_present_walkthrough_runs_and_shows_the_three_moments(capsys, mode):
     assert cli.main(["present", "--no-pause", "--mode", mode]) == 0
     out = capsys.readouterr().out
-    assert "Best match: Software Engineering Internship Info Session  ->  80/100" in out
+    # Titles differ by mode (canned model titles vs. subject lines in fallback).
+    best = next(line for line in out.splitlines() if line.startswith("Best match:"))
+    assert "Software Engineering Internship Info Session" in best and best.endswith("->  80/100")
     assert "80 -> 0" in out
-    assert "New best match: Undergraduate Research Positions" in out  # not the flagged injection email
+    new_best = next(line for line in out.splitlines() if line.startswith("New best match:"))
+    assert "undergraduate research positions" in new_best.lower()  # not the flagged injection email
     assert "Final lane       : general" in out  # spoofed emergency
     assert "lane emergency, verified True" in out  # real alert
     assert "Final lane      : deadline" in out  # injection keeps its real lane
