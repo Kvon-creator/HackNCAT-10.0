@@ -1,0 +1,5 @@
+# AI classifier workstream (Dev 3). Dev 4: merge into backend/requirements.txt when it exists.
+pydantic>=2.7,<3
+tzdata>=2024.1        # IANA time zones on Windows
+openai>=1.40          # only imported for live provider calls
+pytest>=8
