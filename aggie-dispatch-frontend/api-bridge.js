@@ -440,6 +440,7 @@
 
     var chips = document.querySelector('#view-home details summary span.flex');
     if (chips) {
+      chips.classList.add('flex-1', 'min-w-0'); // chips wrap; "Filter breakdown" keeps its row
       chips.textContent = '';
       chips.appendChild(el('strong', 'text-aggie-navy uppercase tracking-wider', 'Ranked lanes:'));
       LANE_ORDER.forEach(function (key) {

@@ -10,34 +10,12 @@
     document.documentElement.classList.add('aggie-pending');
     setTimeout(function () { document.documentElement.classList.remove('aggie-pending'); }, 8000);
   </script>
-  <!-- Tailwind CSS -->
-  <script src="https://cdn.tailwindcss.com"></script>
   <!-- Editorial Fonts: Newsreader (Serif), Inter (Sans), JetBrains Mono (Monospace) -->
   <!-- Bundled locally (fonts/ + fonts.css) so the page doesn't need Google Fonts at runtime -->
   <link href="fonts.css" rel="stylesheet" />
-  <script>
-    tailwind.config = {
-      theme: {
-        extend: {
-          colors: {
-            aggie: {
-              blue: '#004684',
-              navy: '#002D56',
-              gold: '#FDB927',
-              goldSoft: '#FEF7E6',
-              paper: '#FAF9F5',
-              ink: '#111827',
-            }
-          },
-          fontFamily: {
-            serif: ['Newsreader', 'Georgia', 'serif'],
-            sans: ['Inter', 'system-ui', 'sans-serif'],
-            mono: ['JetBrains Mono', 'monospace'],
-          }
-        }
-      }
-    };
-  </script>
+  <!-- Tailwind CSS: prebuilt locally from tailwind.config.js (same theme the Play CDN used).
+       Linked after the <style> block below to keep the CDN's cascade order. Rebuild after adding classes:
+       npx tailwindcss@3.4.17 -c tailwind.config.js -i tailwind.input.css -o tailwind.css --minify -->
   <style>
     /* ==========================================================================
        NC A&T AGGIE DISPATCH — CAMPUS BROADSHEET FIXED SIDE RAIL ENGINE
@@ -330,6 +308,7 @@
       outline-offset: 2px;
     }
     .masthead-header summary:focus-visible { outline: 3px solid #FDB927; outline-offset: 2px; }
+    .cal-day-cell:focus-visible { outline: 3px solid #004684; outline-offset: -3px; }
 
     /* Phones and tablets: three equal tabs with short names, nothing cut off */
     @media (max-width: 959px) {
@@ -370,6 +349,7 @@
         align-items: center;
       }
       #view-calendar button { min-height: 44px; }
+      #view-calendar .cal-day-cell > .flex { flex-wrap: wrap; gap: 2px; }
       #view-calendar .day-events {
         display: flex;
         flex-wrap: wrap;
@@ -398,6 +378,7 @@
       }
     }
   </style>
+  <link href="tailwind.css" rel="stylesheet" />
 </head>
 <body class="font-sans text-aggie-ink selection:bg-aggie-blue selection:text-white">
 
@@ -1559,6 +1540,19 @@ Kickoff begins Saturday, Nov 21 at 9:00 AM in M-ERIC Auditorium. Breakfast, lunc
     window.addEventListener('DOMContentLoaded', () => {
       renderDayAgenda(14);
       renderUpcomingAgenda();
+    });
+  </script>
+  <script>
+    /* Keyboard access for the calendar grid: day cells are clickable <td>s, so make them
+       focusable and let Enter/Space call the same selectDay() a click does. */
+    document.querySelectorAll('td.cal-day-cell[data-day]').forEach(function (td) {
+      var day = Number(td.dataset.day);
+      td.tabIndex = 0;
+      td.setAttribute('role', 'button');
+      td.setAttribute('aria-label', 'November ' + day + ', 2026');
+      td.addEventListener('keydown', function (e) {
+        if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); selectDay(day); }
+      });
     });
   </script>
   <script src="api-bridge.js"></script>

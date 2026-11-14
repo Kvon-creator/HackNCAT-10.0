@@ -31,9 +31,9 @@ What is connected:
 ## Offline-ready styling
 
 - **Fonts:** bundled in `fonts/` and declared in `fonts.css` (latin subset, SIL Open Font License), so Google Fonts isn't needed at runtime.
-- **Tailwind:** the page still loads Tailwind from its CDN. To remove that last internet dependency, build a local stylesheet with the same theme:
+- **Tailwind:** prebuilt into `tailwind.css` from `tailwind.config.js`, which has the same theme the Play CDN used. It's linked after the page's `<style>` block so the cascade matches the CDN's. **After adding or changing Tailwind classes** in `index.html` or `api-bridge.js`, rebuild it:
   `npx tailwindcss@3.4.17 -c tailwind.config.js -i tailwind.input.css -o tailwind.css --minify`
-  Then replace the `cdn.tailwindcss.com` script and the inline `tailwind.config` script in `index.html` with `<link href="tailwind.css" rel="stylesheet" />`, placed after the page's `<style>` block so the cascade stays the same.
+- **Result:** the page makes no internet requests. Checked with Google Fonts and the Tailwind CDN blocked; the only external link is the Google Calendar button the student clicks.
 - **Refresh inbox:** the button calls `POST /api/sync`.
 
 Options:
