@@ -105,7 +105,7 @@ def test_result_carries_cache_metadata():
 def test_spoofed_emergency_is_not_elevated():
     result = classify_email(to_message(FIXTURES_BY_ID["emergency-spoofed-009"]), provider=CannedProvider(CANNED))
     assert result.priority == Priority.general
-    assert result.classification.category == Category.general
+    assert result.classification.category == Category.other  # credential request: never an opportunity
     assert result.verified_source is False
     assert result.needs_review is True
 
@@ -205,6 +205,7 @@ def test_credential_request_caps_unverified_message_at_general():
     result = classify_email(message, provider=CannedProvider({"phish": output}))
     assert result.priority == Priority.general
     assert result.needs_review is True
+    assert result.classification.category == Category.other  # not shown as a scholarship opportunity
 
 
 def test_forged_urgent_without_date_is_demoted():

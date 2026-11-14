@@ -103,6 +103,13 @@ rank(classification, preferences) -> RankResult          # or rank_tags(stored_t
 feed_sort_key(priority, relevance_score, received_at, id, verified_source)
 ```
 
+Live classification for the site's "Try any announcement" panel: `POST /api/classify`
+(`backend/app/routers/classify.py`, approved by Dev 4) takes `{subject, body, sender?}`, returns the
+classified, ranked result plus `classified_by` and `safety_notes` (`ai_classifier.safety_signals`),
+and stores nothing. It uses the rule-based classifier unless `OPENAI_API_KEY` and `OPENAI_MODEL` are
+set in the server's process environment. A message asking for credentials is filed as `other`, never
+as an opportunity.
+
 Demo mode (seed a user's feed without OpenAI):
 
 ```python

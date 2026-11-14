@@ -273,7 +273,7 @@
       "subject": "EMERGENCY: Campus lockdown - verify your identity",
       "body": "This is an emergency notice from Campus Police. All students must confirm their identity at the link below within 1 hour or their accounts will be locked.\nhttps://campus-alerts.example.net/verify",
       "expected": {
-        "category": "general",
+        "category": "other",
         "priority": "general",
         "verified_source": false,
         "needs_review": true,
