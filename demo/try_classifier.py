@@ -190,19 +190,26 @@ def cmd_eval(args):
     provider = make_provider(args.mode)
     passed = 0
     field_misses = {}
-    print("%-24s %-6s %-12s %-10s %s" % ("fixture", "result", "category", "lane", "mismatches"))
+    sources = {}
+    print("%-24s %-6s %-9s %-12s %-10s %s" % ("fixture", "result", "answered", "category", "lane", "mismatches"))
     for f in FIXTURES:
         result = classify_email(to_message(f), provider=provider)
         misses = compare(result, f["expected"], lenient_review=args.mode == "fallback")
+        # In canned/live mode a fallback answer means the model path did not run.
+        if args.mode != "fallback" and result.source.value != "model":
+            misses.append(("source", "model", "%s (%s)" % (result.source.value, result.fallback_reason)))
         passed += not misses
+        sources[result.source.value] = sources.get(result.source.value, 0) + 1
         for field, _, _ in misses:
             field_misses[field] = field_misses.get(field, 0) + 1
-        print("%-24s %-6s %-12s %-10s %s" % (
-            f["id"], "PASS" if not misses else "FAIL", result.classification.category.value,
-            result.priority.value, ", ".join(m[0] for m in misses) or "",
+        print("%-24s %-6s %-9s %-12s %-10s %s" % (
+            f["id"], "PASS" if not misses else "FAIL", result.source.value,
+            result.classification.category.value, result.priority.value,
+            ", ".join(m[0] if m[0] != "source" else "source=%s" % m[2] for m in misses) or "",
         ))
     print()
     print("mode=%s  passed %d/%d fixtures" % (args.mode, passed, len(FIXTURES)))
+    print("answered by: %s" % ", ".join("%s=%d" % kv for kv in sorted(sources.items())))
     if field_misses:
         print("mismatches by field: %s" % ", ".join("%s=%d" % kv for kv in sorted(field_misses.items())))
     print("Run 'show <id> --mode %s' to see details for a failing fixture." % args.mode)
