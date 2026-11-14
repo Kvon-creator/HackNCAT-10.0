@@ -73,7 +73,11 @@ def _safe_graph_link(value: Any) -> str | None:
 
 def _validate_next_link(value: str) -> str:
     parsed = urlparse(value)
-    if parsed.scheme != "https" or parsed.hostname != GRAPH_HOST or parsed.port not in (None, 443):
+    try:
+        port = parsed.port
+    except ValueError:
+        raise GraphServiceError("graph_invalid_paging_link", "Microsoft returned an invalid paging link") from None
+    if parsed.scheme != "https" or parsed.hostname != GRAPH_HOST or port not in (None, 443):
         raise GraphServiceError("graph_invalid_paging_link", "Microsoft returned an invalid paging link")
     path = unquote(parsed.path)
     if not re.fullmatch(r"/v1\.0/me/mailfolders(?:/inbox|\('inbox'\))/messages", path, re.IGNORECASE):
@@ -150,7 +154,7 @@ def _get_obo_token(assertion: str, scopes: list[str]) -> str:
             403,
             result.get("claims") if isinstance(result.get("claims"), str) and len(result["claims"]) <= 8192 else None,
         )
-    if aadsts_codes & {"500133", "700024"}:
+    if "500133" in aadsts_codes:
         raise GraphServiceError("invalid_assertion", "The Microsoft sign-in session has expired", 401)
     raise GraphServiceError("graph_auth_failed", "Microsoft authentication is temporarily unavailable", 503)
 

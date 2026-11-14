@@ -76,6 +76,17 @@ def test_rejects_paging_link_to_a_different_mail_folder(monkeypatch: pytest.Monk
     assert exc.value.code == "graph_invalid_paging_link"
 
 
+@pytest.mark.parametrize("port", ["abc", "70000"])
+def test_rejects_malformed_paging_link_port_as_safe_graph_error(monkeypatch: pytest.MonkeyPatch, port: str) -> None:
+    use_transport(monkeypatch, lambda request: httpx.Response(200, json={
+        "value": [{"id": "one"}],
+        "@odata.nextLink": f"https://graph.microsoft.com:{port}/v1.0/me/mailFolders/inbox/messages?$skiptoken=secret",
+    }))
+    with pytest.raises(graph.GraphServiceError) as exc:
+        graph.list_recent_messages("validated-assertion", limit=2)
+    assert exc.value.code == "graph_invalid_paging_link"
+
+
 def test_retries_retry_after_within_budget(monkeypatch: pytest.MonkeyPatch) -> None:
     calls = 0
     sleeps: list[float] = []
@@ -163,6 +174,15 @@ def test_distinguishes_obo_claims_challenge_and_expired_assertion(monkeypatch: p
         graph._get_obo_token("expired-assertion", ["graph-scope"])
     assert expired.value.code == "invalid_assertion"
     assert expired.value.status_code == 401
+
+    FakeApplication.result = {
+        "error": "invalid_grant",
+        "error_description": "AADSTS700024: client assertion is outside its valid time range",
+    }
+    with pytest.raises(graph.GraphServiceError) as client_assertion:
+        graph._get_obo_token("validated-assertion", ["graph-scope"])
+    assert client_assertion.value.code == "graph_auth_failed"
+    assert client_assertion.value.status_code == 503
 
 
 def test_preserves_transaction_id_and_converts_dst_boundary_to_utc(monkeypatch: pytest.MonkeyPatch) -> None:
