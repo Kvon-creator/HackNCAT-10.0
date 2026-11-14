@@ -24,7 +24,8 @@ What is connected:
 - **Feed:** a demo session is created automatically, and the Home digest shows all ranked opportunities with lane, match score, reason and dates.
 - **Persona switcher:** in the sidebar, it saves that student's preferences and re-ranks the feed.
 - **Save:** the button saves or unsaves the opportunity in the API.
-- **Add to calendar:** the button asks for a confirming second click, then writes the event (simulated in demo mode) and adds it to the page's November calendar.
+- **+ Google Calendar:** opens Google Calendar in a new tab with the event filled in (title, time in campus time, location, summary and match reason). The student reviews it and clicks Save. No Google setup or API keys are needed, and it works with any Google account.
+- **+ Outlook (demo):** asks for a confirming second click, then records a simulated event through `POST /api/calendar/events` and adds it to the page's November calendar. Live Outlook needs NC A&T app registration.
 - **Refresh inbox:** the button calls `POST /api/sync`.
 
 Options:

@@ -94,6 +94,25 @@
     return null;
   }
 
+  // Google Calendar "create event" link (no OAuth: the student reviews and clicks Save in Google).
+  function toGoogleUtc(iso) {
+    return new Date(Date.parse(iso)).toISOString().replace(/[-:]/g, '').replace(/\.\d{3}Z$/, 'Z');
+  }
+
+  function googleCalendarUrl(item) {
+    var req = calendarRequest(item);
+    if (!req) return null;
+    var dates = req.all_day
+      ? req.start.replace(/-/g, '') + '/' + req.end.replace(/-/g, '')
+      : toGoogleUtc(req.start) + '/' + toGoogleUtc(req.end);
+    var details = [item.summary, item.relevance_reason ? 'Why it matters to you: ' + item.relevance_reason : '',
+      'Added from AggieConnect.'].filter(Boolean).join('\n\n');
+    if (details.length > 1200) details = details.slice(0, 1197) + '...';
+    var params = new URLSearchParams({ action: 'TEMPLATE', text: item.title || 'AggieConnect event', dates: dates, details: details, ctz: ZONE });
+    if (item.location) params.set('location', item.location);
+    return 'https://calendar.google.com/calendar/render?' + params.toString();
+  }
+
   function localParts(iso) {
     var parts = {};
     new Intl.DateTimeFormat('en-US', {
@@ -148,7 +167,8 @@
 
   var helpers = {
     apiBase: apiBase, addMinutesKeepOffset: addMinutesKeepOffset, nextDate: nextDate,
-    calendarRequest: calendarRequest, whenText: whenText, novemberDay: novemberDay,
+    calendarRequest: calendarRequest, googleCalendarUrl: googleCalendarUrl,
+    whenText: whenText, novemberDay: novemberDay,
     laneCounts: laneCounts, PERSONA_PREFS: PERSONA_PREFS
   };
   if (typeof module !== 'undefined' && module.exports) {
@@ -265,13 +285,13 @@
       return btn;
     }
     var armed = false;
-    btn.textContent = '+ Add to calendar';
+    btn.textContent = '+ Outlook (demo)';
     btn.addEventListener('click', function () {
       if (!armed) { // two-step confirmation, as the API requires confirmed=true
         armed = true;
         btn.textContent = 'Confirm: ' + whenText(item) + '?';
         setTimeout(function () {
-          if (armed && !btn.disabled) { armed = false; btn.textContent = '+ Add to calendar'; }
+          if (armed && !btn.disabled) { armed = false; btn.textContent = '+ Outlook (demo)'; }
         }, 6000);
         return;
       }
@@ -291,11 +311,26 @@
         }
       }).catch(function (err) {
         btn.disabled = false;
-        btn.textContent = '+ Add to calendar';
+        btn.textContent = '+ Outlook (demo)';
         toast(err.message);
       });
     });
     return btn;
+  }
+
+  function googleButton(item) {
+    var url = googleCalendarUrl(item);
+    if (!url) return null;
+    var link = el('a', 'px-2.5 py-1 text-xs font-mono font-semibold border border-aggie-blue rounded-sm bg-aggie-blue text-white hover:bg-aggie-navy transition', '+ Google Calendar');
+    link.href = url;
+    link.target = '_blank';
+    link.rel = 'noopener noreferrer';
+    link.title = 'Opens Google Calendar with this event filled in. Review it and click Save.';
+    link.addEventListener('click', function () {
+      link.textContent = '↗ Opened in Google Calendar';
+      toast('Review "' + item.title + '" in Google Calendar and click Save.');
+    });
+    return link;
   }
 
   function card(item) {
@@ -321,6 +356,8 @@
 
     var actions = el('div', 'mt-4 flex flex-wrap items-center gap-3');
     actions.appendChild(saveButton(item));
+    var google = googleButton(item);
+    if (google) actions.appendChild(google);
     var cal = calendarButton(item);
     if (cal) actions.appendChild(cal);
     article.appendChild(actions);
