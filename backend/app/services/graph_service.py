@@ -13,7 +13,7 @@ import time
 from datetime import date, datetime, timezone
 from email.utils import parsedate_to_datetime
 from typing import Any, Mapping
-from urllib.parse import urlparse
+from urllib.parse import unquote, urlparse
 from zoneinfo import ZoneInfo, ZoneInfoNotFoundError
 
 import httpx
@@ -21,6 +21,7 @@ import msal
 
 GRAPH_ROOT = "https://graph.microsoft.com/v1.0"
 GRAPH_HOST = "graph.microsoft.com"
+INBOX_MESSAGES_PATH = "/v1.0/me/mailFolders/inbox/messages"
 DEFAULT_TIMEOUT = httpx.Timeout(10.0, connect=3.0)
 MAX_MESSAGES = 25
 MAX_RETRIES = 2
@@ -74,7 +75,8 @@ def _validate_next_link(value: str) -> str:
     parsed = urlparse(value)
     if parsed.scheme != "https" or parsed.hostname != GRAPH_HOST or parsed.port not in (None, 443):
         raise GraphServiceError("graph_invalid_paging_link", "Microsoft returned an invalid paging link")
-    if not parsed.path.startswith("/v1.0/me/messages"):
+    path = unquote(parsed.path)
+    if not re.fullmatch(r"/v1\.0/me/mailfolders(?:/inbox|\('inbox'\))/messages", path, re.IGNORECASE):
         raise GraphServiceError("graph_invalid_paging_link", "Microsoft returned an invalid paging link")
     return value
 
@@ -130,16 +132,25 @@ def _get_obo_token(assertion: str, scopes: list[str]) -> str:
     if token:
         return token
     error = result.get("error") if isinstance(result, dict) else None
-    if error == "insufficient_claims":
+    suberror = str(result.get("suberror", "")).casefold() if isinstance(result, dict) else ""
+    description = str(result.get("error_description", "")) if isinstance(result, dict) else ""
+    aadsts_codes = set(re.findall(r"AADSTS(\d+)", description, re.IGNORECASE))
+    if error == "consent_required" or suberror == "consent_required" or "65001" in aadsts_codes:
+        raise GraphServiceError("graph_consent_required", "Microsoft access needs additional consent", 403)
+    claims_needed = (
+        error in {"insufficient_claims", "interaction_required"}
+        or suberror in {"basic_action", "additional_action", "message_only", "user_password_expired"}
+        or bool(aadsts_codes & {"50076", "50078", "50079", "50158", "53000", "53001", "53003", "53004", "53009", "53010", "53011"})
+        or bool(result.get("claims"))
+    ) if isinstance(result, dict) else False
+    if claims_needed:
         raise GraphServiceError(
             "graph_claims_challenge",
             "Microsoft requires additional account verification",
             403,
             result.get("claims") if isinstance(result.get("claims"), str) and len(result["claims"]) <= 8192 else None,
         )
-    if error in {"consent_required", "interaction_required"}:
-        raise GraphServiceError("graph_consent_required", "Microsoft access needs additional consent", 403)
-    if error in {"invalid_grant", "invalid_request"}:
+    if aadsts_codes & {"500133", "700024"}:
         raise GraphServiceError("invalid_assertion", "The Microsoft sign-in session has expired", 401)
     raise GraphServiceError("graph_auth_failed", "Microsoft authentication is temporarily unavailable", 503)
 
@@ -194,11 +205,10 @@ def list_recent_messages(assertion: str, limit: int = MAX_MESSAGES) -> list[dict
         "$top": str(min(limit, 25)),
     }
     messages: list[dict[str, Any]] = []
-    next_url: str | None = f"{GRAPH_ROOT}/me/messages?{httpx.QueryParams(params)}"
+    next_url: str | None = f"https://{GRAPH_HOST}{INBOX_MESSAGES_PATH}?{httpx.QueryParams(params)}"
     with httpx.Client(timeout=DEFAULT_TIMEOUT, follow_redirects=False) as client:
         while next_url and len(messages) < limit:
-            if not next_url.startswith(f"{GRAPH_ROOT}/me/messages?"):
-                next_url = _validate_next_link(next_url)
+            next_url = _validate_next_link(next_url)
             response = _request(client, "GET", next_url, headers)
             try:
                 payload = response.json()
@@ -309,6 +319,6 @@ def create_event(assertion: str, event: Mapping[str, Any], transaction_id: str) 
         raise GraphServiceError("graph_invalid_response", "Microsoft returned an invalid response", 502) from exc
     event_id = result.get("id") if isinstance(result, dict) else None
     link = _safe_graph_link(result.get("webLink")) if isinstance(result, dict) else None
-    if not event_id or not link:
+    if not event_id:
         raise GraphServiceError("graph_invalid_response", "Microsoft returned an invalid event", 502)
     return {"graph_event_id": event_id, "web_link": link, "status": "added"}

@@ -22,7 +22,7 @@ Calendar request: `{ "opportunity_id": "UUID", "confirmed": true, "all_day": fal
 "start": "ISO-8601 with offset", "end": "ISO-8601 with offset", "time_zone": "IANA zone" }`.
 All-day start/end are `YYYY-MM-DD`; the end date is exclusive. A live write reuses the same
 server-generated Graph `transactionId` after a pending/uncertain result. Response:
-`{ "id": "Graph event ID", "status": "added", "web_link": "validated Outlook URL", "simulated": false }`.
+`{ "id": "Graph event ID", "status": "added", "web_link": "validated Outlook URL or null", "simulated": false }`.
 The adapter exposes retry delays through `Retry-After` and account claims challenges through
 `WWW-Authenticate`; clients may pass the claims value to MSAL when reacquiring the API token.
 

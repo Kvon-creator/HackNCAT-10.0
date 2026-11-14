@@ -31,7 +31,7 @@ def test_reads_pages_with_immutable_ids_and_normalized_fields(monkeypatch: pytes
         if len(calls) == 1:
             return httpx.Response(200, json={
                 "value": [{"id": "immutable-1", "subject": "Internship", "from": {"emailAddress": {"address": "career@example.edu"}}, "receivedDateTime": "2026-11-13T15:00:00Z", "bodyPreview": "Apply now", "webLink": "https://outlook.office.com/mail/item"}],
-                "@odata.nextLink": "https://graph.microsoft.com/v1.0/me/messages?$skiptoken=abc",
+                "@odata.nextLink": "https://graph.microsoft.com/v1.0/me/mailFolders/inbox/messages?$skiptoken=abc",
             })
         return httpx.Response(200, json={"value": [{"id": "immutable-2", "subject": "Speaker"}]})
 
@@ -41,6 +41,7 @@ def test_reads_pages_with_immutable_ids_and_normalized_fields(monkeypatch: pytes
     assert [item["id"] for item in result] == ["immutable-1", "immutable-2"]
     assert result[0]["sender"] == "career@example.edu"
     assert result[0]["source_link"] == "https://outlook.office.com/mail/item"
+    assert calls[0].url.path == "/v1.0/me/mailFolders/inbox/messages"
     assert calls[0].headers["Prefer"] == 'IdType="ImmutableId"'
     assert calls[0].url.params["$top"] == "2"
     assert len(calls) == 2
@@ -54,7 +55,7 @@ def test_rejects_wrong_paging_host_before_following_it(monkeypatch: pytest.Monke
         calls += 1
         return httpx.Response(200, json={
             "value": [{"id": "one"}],
-            "@odata.nextLink": "https://attacker.example/v1.0/me/messages?$skiptoken=secret",
+            "@odata.nextLink": "https://attacker.example/v1.0/me/mailFolders/inbox/messages?$skiptoken=secret",
         })
 
     use_transport(monkeypatch, handler)
@@ -63,6 +64,16 @@ def test_rejects_wrong_paging_host_before_following_it(monkeypatch: pytest.Monke
     assert exc.value.code == "graph_invalid_paging_link"
     assert calls == 1
     assert "attacker.example" not in str(exc.value)
+
+
+def test_rejects_paging_link_to_a_different_mail_folder(monkeypatch: pytest.MonkeyPatch) -> None:
+    use_transport(monkeypatch, lambda request: httpx.Response(200, json={
+        "value": [{"id": "one"}],
+        "@odata.nextLink": "https://graph.microsoft.com/v1.0/me/mailFolders/sentitems/messages?$skiptoken=secret",
+    }))
+    with pytest.raises(graph.GraphServiceError) as exc:
+        graph.list_recent_messages("validated-assertion", limit=2)
+    assert exc.value.code == "graph_invalid_paging_link"
 
 
 def test_retries_retry_after_within_budget(monkeypatch: pytest.MonkeyPatch) -> None:
@@ -122,13 +133,32 @@ def test_distinguishes_obo_claims_challenge_and_expired_assertion(monkeypatch: p
             return self.result
 
     monkeypatch.setattr(graph.msal, "ConfidentialClientApplication", FakeApplication)
-    FakeApplication.result = {"error": "insufficient_claims", "claims": "encoded-claims-challenge"}
+    FakeApplication.result = {
+        "error": "invalid_grant",
+        "suberror": "consent_required",
+        "error_description": "AADSTS65001: consent is required",
+    }
+    with pytest.raises(graph.GraphServiceError) as consent:
+        graph._get_obo_token("validated-assertion", ["graph-scope"])
+    assert consent.value.code == "graph_consent_required"
+    assert consent.value.status_code == 403
+
+    FakeApplication.result = {
+        "error": "invalid_grant",
+        "suberror": "basic_action",
+        "error_description": "AADSTS50076: multifactor authentication is required",
+        "claims": "encoded-mfa-challenge",
+    }
     with pytest.raises(graph.GraphServiceError) as challenge:
         graph._get_obo_token("validated-assertion", ["graph-scope"])
     assert challenge.value.code == "graph_claims_challenge"
-    assert challenge.value.claims == "encoded-claims-challenge"
+    assert challenge.value.claims == "encoded-mfa-challenge"
 
-    FakeApplication.result = {"error": "invalid_grant"}
+    FakeApplication.result = {
+        "error": "invalid_grant",
+        "suberror": "invalid_grant",
+        "error_description": "AADSTS500133: assertion is outside its valid time range",
+    }
     with pytest.raises(graph.GraphServiceError) as expired:
         graph._get_obo_token("expired-assertion", ["graph-scope"])
     assert expired.value.code == "invalid_assertion"
@@ -170,8 +200,12 @@ def test_preserves_transaction_id_and_converts_dst_boundary_to_utc(monkeypatch: 
     assert result["web_link"] == "https://outlook.office365.com/owa/?itemid=event-1"
 
 
-def test_rejects_event_response_with_untrusted_web_link(monkeypatch: pytest.MonkeyPatch) -> None:
-    use_transport(monkeypatch, lambda request: httpx.Response(201, json={"id": "event-1", "webLink": "https://attacker.example/event"}))
+@pytest.mark.parametrize("payload", [
+    {"id": "event-1"},
+    {"id": "event-1", "webLink": "https://attacker.example/event"},
+])
+def test_created_event_is_successful_when_web_link_is_missing_or_untrusted(monkeypatch: pytest.MonkeyPatch, payload: dict) -> None:
+    use_transport(monkeypatch, lambda request: httpx.Response(201, json=payload))
     event = {
         "confirmed": True,
         "all_day": False,
@@ -179,10 +213,9 @@ def test_rejects_event_response_with_untrusted_web_link(monkeypatch: pytest.Monk
         "end": "2026-11-19T16:00:00-05:00",
         "time_zone": "America/New_York",
     }
-    with pytest.raises(graph.GraphServiceError) as exc:
-        graph.create_event("validated-assertion", event, "stable-transaction-id")
-    assert exc.value.code == "graph_invalid_response"
-    assert "attacker.example" not in str(exc.value)
+    result = graph.create_event("validated-assertion", event, "stable-transaction-id")
+    assert result["graph_event_id"] == "event-1"
+    assert result["web_link"] is None
 
 
 def test_all_day_end_is_exclusive_and_unconfirmed_writes_are_rejected() -> None:
